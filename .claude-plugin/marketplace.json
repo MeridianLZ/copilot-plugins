@@ -1,0 +1,16 @@
+{
+  "name": "fintech-marketplace",
+  "owner": { "name": "zautke" },
+  "plugins": [
+    {
+      "name": "fintech-frontend",
+      "source": "./plugins/fintech-frontend",
+      "description": "Advanced React 19 + TypeScript banking frontend: dnd-kit next-gen drag & drop, RTK Query data layer, WCAG 2.1 AA, BFF cookie auth, masked-data UI, performance and testing agents."
+    },
+    {
+      "name": "fintech-backend",
+      "source": "./plugins/fintech-backend",
+      "description": "Enterprise C# .NET microservices for banking: vertical-slice architecture, Azure Service Bus outbox/saga, EF Core migration safety, ISO 20022 payments, double-entry ledger modeling, PCI/SOX/SOC2/GLBA enforcement hooks."
+    }
+  ]
+}

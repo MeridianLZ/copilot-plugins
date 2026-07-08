@@ -1,0 +1,38 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-destructive.sh" },
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/block-secrets-exfil.sh" }
+      ]
+    },
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-backend-write.sh" }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format-backend.sh" }
+      ]
+    },
+    {
+      "matcher": "",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/audit-log.sh" }
+      ]
+    }
+  ],
+  "SessionStart": [
+    {
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/backend-context.sh" }
+      ]
+    }
+  ]
+}

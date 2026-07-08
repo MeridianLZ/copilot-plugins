@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "http",
+      "url": "https://ctx7.braisenly.com/mcp"
+    },
+    "chrome-devtools": {
+      "command": "pnpm",
+      "args": ["dlx", "chrome-devtools-mcp@latest"]
+    }
+  }
+}

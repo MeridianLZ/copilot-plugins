@@ -1,0 +1,47 @@
+---
+name: iso20022-payments
+description: ISO 20022 payments messaging reference — pain/pacs/camt families, CBPR+/HVPS+ usage guidelines, structured address requirements and the November 2026 Swift deadline, MT-to-MX mapping, identifiers and idempotency. MUST be consulted for any payment initiation, clearing, settlement, statement, or exceptions work, and for any data model holding party addresses or remittance data.
+---
+
+# ISO 20022 Payments
+
+## Why this is urgent, not theoretical
+The **November 14, 2026** Swift Standards Release retires fully unstructured postal addresses across CBPR+, HVPS+, and several national clearing systems, and ends MT101 (FIN) coexistence in favour of **pain.001v9** over FINplus. Hybrid addresses (structured country + town name plus limited free-text lines) remain valid indefinitely; fully unstructured does not. A 2026 industry survey of ~308 payments professionals found more than half of payment engines still non-compliant, with core banking and KYC platforms furthest behind — because this requires schema redesign, data remediation, and regression testing, not a format patch at the edge.
+
+*This reflects information current to early 2026. Verify dates and rules against current Swift/network publications before acting — this schedule has shifted before.*
+
+## Message families
+| Family | Purpose | Common messages |
+|---|---|---|
+| **pain** | customer ↔ bank initiation | pain.001 (initiation), pain.002 (status), pain.008 (direct debit) |
+| **pacs** | bank ↔ bank clearing/settlement | pacs.008 (credit transfer), pacs.002 (status), pacs.004 (return) |
+| **camt** | cash management & reporting | camt.052 (intraday), camt.053 (statement), camt.054 (notification), camt.05x/10x (exceptions & investigations) |
+
+## Implementation rules
+
+**1. Structured addresses are a data-model concern, not serialization.**
+Party addresses need discrete columns: `StrtNm`, `BldgNb`, `PstCd`, `TwnNm`, `CtrySubDvsn`, `Ctry`. A single `address_line` varchar is a migration blocker — flag it and route through `efcore-migration-safety` using expand-contract. You cannot reliably parse free-text addresses into structured fields, so the plan is a data-remediation campaign with customer/counterparty outreach, not a regex.
+
+**2. Validate against the real XSD *and* the network usage guideline.** CBPR+ and HVPS+ each narrow the base schema. Schema-valid is not network-valid; validate both or you'll ship rejects.
+
+**3. Never truncate to fit.** Silent truncation of names, addresses, or remittance data causes rejects and sanctions-screening false negatives. Reject at the boundary with a specific, actionable error instead.
+
+**4. Preserve rich data end to end.** The entire point is structured remittance, purpose codes, and LEIs surviving the whole chain. Flattening ISO data into a legacy internal model at the first hop destroys the value and creates a second migration later.
+
+**5. Character sets.** Restricted Latin per network rules. Transliteration is an explicit, logged decision — never an accidental encoding side effect.
+
+**6. Identifiers — know which is which.**
+- `MsgId` — yours, per message, unique
+- `InstrId` — yours, per instruction, point-to-point
+- `EndToEndId` — supplied by the originator, echoed unchanged through the chain (reconciliation key)
+- `UETR` — UUIDv4 tracking the payment across its whole lifecycle; generate once, propagate always
+
+Map these to your outbox `MessageId`/`CorrelationId` deliberately — see `servicebus-patterns`.
+
+**7. Amounts** carry explicit currency and currency-appropriate decimal precision. Not every currency is two decimal places. Coordinate with `ledger-modeling`.
+
+## Exceptions & Investigations
+The camt-based E&I overhaul replaces free-text MT19x-style queries with structured case messages. Model cases as first-class aggregates with status transitions — not email threads with an id.
+
+## Testing
+Golden-file tests per message version against the XSD and the network guideline; round-trip tests (internal model → XML → internal model) proving nothing is lost; explicit reject-path tests for over-length and unstructured-address inputs.

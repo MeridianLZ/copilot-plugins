@@ -1,0 +1,29 @@
+---
+name: a11y-standards
+description: WCAG 2.1 AA implementation standards for regulated financial UI — labeling, focus, live regions, keyboard drag-and-drop, contrast, motion, targets. Consult when building or reviewing any interactive UI, and before any PR touching the frontend.
+---
+
+# Accessibility Standards (WCAG 2.1 AA — release gate)
+
+Accessibility here is a compliance obligation with direct legal exposure for customer-facing financial channels, not a polish item. Findings are blockers.
+
+## Forms
+Programmatic labels on every input; errors linked with `aria-describedby` and announced; focus moves to the first error on failed submit; required/invalid conveyed non-visually; grouped inputs use `fieldset`/`legend`.
+
+## Focus
+Visible indicator meeting contrast; logical tab order; dialogs trap focus and restore to the trigger on close; route changes move focus to the heading and announce the page title; no positive `tabindex`.
+
+## Live regions
+`aria-live="polite"` for status (submitted / pending / settled), `role="alert"` for errors. Announce drag start, drag over target, drop result, and cancel.
+
+## Keyboard drag-and-drop
+Every drag interaction has a keyboard path: focus handle → activate → arrow → Enter to drop → Escape to cancel, with announcements at each step. `@dnd-kit`'s Accessibility plugin provides the wiring; you must still supply meaningful announcement text. Mouse-only reorder = blocker.
+
+## Visual
+Contrast ≥4.5:1 text, ≥3:1 UI components and graphical objects. **Color is never the sole indicator** — credit/debit needs a sign or icon; chart series need patterns or direct labels. Respect `prefers-reduced-motion` on transitions, drag feedback, and chart animation. Touch targets ≥44×44 CSS px.
+
+## Semantics
+No `div` buttons. Landmarks present (`banner`, `nav`, `main`, `contentinfo`). Icon-only buttons carry accessible names. Tables use real table semantics.
+
+## Verification
+Automated (axe/eslint-plugin-jsx-a11y) catches roughly a third of issues. Testing Library role/name queries catch more. **Manual AT passes (NVDA + VoiceOver) on money-movement flows are required** before release — don't claim conformance from automated checks alone.

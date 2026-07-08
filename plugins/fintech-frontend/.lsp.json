@@ -1,0 +1,10 @@
+{
+  "lspServers": {
+    "typescript": {
+      "command": "pnpm",
+      "args": ["exec", "typescript-language-server", "--stdio"],
+      "extensions": ["ts", "tsx", "mts", "cts"],
+      "rootMarkers": ["tsconfig.json", "pnpm-workspace.yaml", "package.json"]
+    }
+  }
+}

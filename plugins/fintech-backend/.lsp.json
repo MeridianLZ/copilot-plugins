@@ -1,0 +1,10 @@
+{
+  "lspServers": {
+    "csharp": {
+      "command": "csharp-ls",
+      "args": [],
+      "extensions": ["cs"],
+      "rootMarkers": ["*.sln", "*.slnx", "Directory.Build.props"]
+    }
+  }
+}

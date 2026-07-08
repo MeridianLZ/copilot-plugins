@@ -1,0 +1,25 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/guard-frontend-write.sh" }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format-frontend.sh" }
+      ]
+    }
+  ],
+  "SessionStart": [
+    {
+      "hooks": [
+        { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/frontend-context.sh" }
+      ]
+    }
+  ]
+}
