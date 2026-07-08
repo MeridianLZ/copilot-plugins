@@ -1,0 +1,41 @@
+name: Fintech Compliance Guard
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  compliance-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify jq is present
+        run: jq --version
+
+      - name: Run compliance guard over changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/guard-core.sh
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="origin/${{ github.base_ref }}...HEAD"
+          else
+            RANGE="HEAD~1...HEAD"
+          fi
+          fail=0
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *.cs|*.ts|*.tsx|*.js|*.jsx|*.json|*.yml|*.yaml|*.sql|*.md)
+                scripts/guard-core.sh --dialect plain --file "$f" || fail=1 ;;
+            esac
+          done < <(git diff --name-only --diff-filter=ACM $RANGE)
+          if [ $fail -ne 0 ]; then
+            echo "::error::Compliance guard found blocking violations (PCI-DSS / SOX / ledger integrity)."
+            exit 1
+          fi
+          echo "Compliance guard passed."

@@ -1,0 +1,6 @@
+{
+  "name": "fintech-frontend",
+  "version": "1.0.0",
+  "description": "React 19 banking frontend: dnd-kit next-gen drag & drop, RTK Query, WCAG 2.1 AA, BFF cookie auth, masked financial data.",
+  "author": "zautke"
+}

@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch|Write|Edit)$",
+        "hooks": [
+          { "type": "command", "command": "./scripts/guard-core.sh --dialect codex", "timeout": 10, "statusMessage": "compliance guard" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "./scripts/audit-log.sh", "timeout": 10 } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "./scripts/backend-context.sh", "timeout": 10 } ] }
+    ]
+  }
+}

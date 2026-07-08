@@ -1,0 +1,50 @@
+---
+name: vertical-slice-architecture
+description: How to structure code inside a .NET service — vertical slices, feature folders, REPR/FastEndpoints, Wolverine vs MediatR vs plain DI, and where shared logic belongs. Consult when adding a feature, creating a new service's internals, deciding whether to introduce an abstraction, or reviewing project structure.
+---
+
+# Vertical Slice Architecture
+
+## The organizing principle
+Structure by **feature**, not by technical layer. A feature request should touch one directory. The endpoint, request/response records, handler, validator, and its queries live together:
+
+```
+Features/Payments/
+├── CreatePayment.cs        # route + request/response + handler + validator
+├── GetPayment.cs
+├── ListPayments.cs
+└── Payments.Endpoints.cs   # route group registration, shared policy
+```
+
+## The hybrid that actually holds up
+Pure VSA everywhere degrades once features start sharing domain rules. The durable arrangement:
+- **Domain core keeps Clean-style dependency direction** — money, ledger invariants, saga state machines depend on nothing infrastructural. This is where correctness lives and it must stay testable in isolation.
+- **Slices organize the features around it** — they may talk to EF Core, the message bus, and HTTP directly. No ceremony layers between a slice and its data.
+
+Slices are not license to put EF queries inside domain invariant logic, and Clean layering is not license to route every trivial read through four projects.
+
+## Duplication vs abstraction
+Duplication across slices is acceptable and frequently correct — it's the price of change isolation, and it's cheaper than a wrong abstraction coupling three features. But when the same **domain rule** shows up in three slices, that's a domain concept trying to escape: pull it into the domain core, not into a `Shared`/`Common` service class. The distinction is rule vs mechanism.
+
+## Mediator decision — make it explicitly
+| Choice | When |
+|---|---|
+| **Plain DI**, handler injected and called directly | Default. Explicit, navigable, one less dependency. VSA is not a MediatR pattern. |
+| **Wolverine** | You want low-ceremony VSA with transactional + validation middleware and messaging in one model, collapsing layers MediatR leaves you hand-wiring |
+| **MediatR** | Team already standardizes on it, or you genuinely need uniform pipeline behaviors across many slices |
+| **FastEndpoints (REPR)** | Endpoint-heavy service wanting one class per endpoint with no mediator at all |
+
+Never adopt a mediator because "that's how vertical slices work." Name the cross-cutting concern it earns its place with.
+
+## Cross-cutting concerns
+Genuinely shared policy → middleware, endpoint filters, or pipeline behaviors. Feature-specific validation and decisions → inside the slice. Don't let a shared service layer become the new coupling point you just escaped.
+
+## Anti-patterns
+- Generic `IRepository<T>` over EF Core — `DbContext` is already repository + unit of work
+- Fat orchestration services calling many repositories (the N+1 factory)
+- A `Common` project that accumulates everything and couples all features
+- `Controllers/` + `Services/` + `Repositories/` layer folders in new code
+- Single-implementation interfaces created only for mocking — Testcontainers removes the need
+
+## Testing implication
+Slices are testable as units with clear inputs and outputs. Integration tests hit the slice through the real endpoint with a real database container — that's the highest-value layer here. See `dotnet-testing`.

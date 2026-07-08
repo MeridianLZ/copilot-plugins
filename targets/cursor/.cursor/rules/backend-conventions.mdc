@@ -1,0 +1,39 @@
+---
+description: Baseline .NET banking backend conventions: stack, compliance regimes, money, ledger, layout
+globs: ["**/*.cs","**/*.csproj"]
+alwaysApply: true
+---
+
+
+# Backend Conventions (authoritative)
+
+## Stack — do not substitute
+.NET 9+ · ASP.NET Core Minimal APIs organized as vertical slices · EF Core · **Azure Service Bus** (raw SDK, no MassTransit) · SQL Server · Okta/Auth0 OIDC via BFF · **on-prem Kubernetes** (Helm + Kustomize, no public-cloud IaC) · OpenTelemetry · xUnit + Testcontainers.
+
+## Compliance in force
+**PCI-DSS v4.0 · SOX ITGC · SOC 2 Type II · GLBA/FFIEC.** These are not advisory. Hooks enforce the deterministic parts; you are responsible for the judgment parts.
+
+## Hard rules
+1. Never write, log, echo, or commit a PAN, CVV, SSN, or full account number — not even in tests. Tokenized fixtures only (`tok_test_visa`, `4111-TEST-MASK`).
+2. Secrets come from Kubernetes Secrets via External Secrets Operator. Never inline connection strings, keys, or client secrets in code, config, or compose files.
+3. Migrations are generated, reviewed, and shipped as **idempotent SQL scripts**. No `Database.Migrate()` in production startup. `dotnet ef database update` against shared environments is blocked.
+4. Every endpoint: named authorization policy, input validation, idempotency for mutating operations, an OTel activity.
+5. Money is `decimal` internally and `string` + ISO 4217 currency over the wire. Float or double anywhere near an amount is a build-blocking defect.
+6. The ledger is append-only. Corrections are reversal entries. `UPDATE` on ledger tables is forbidden.
+7. Every Service Bus consumer is idempotent and traced. Every cross-service write uses the outbox.
+
+## Layout
+```
+src/<Service>.Api/Features/<Capability>/<Endpoint>.cs   # route + handler + validator + DTOs
+src/<Service>.Domain/                                    # invariants, money, ledger — infra-free
+src/<Service>.Infrastructure/                            # DbContext, outbox, messaging
+tests/<Service>.Tests | .IntegrationTests | Compliance.Tests
+contracts/{openapi,migrations}/                          # reviewed deployable artifacts
+deploy/{chart,overlays}/
+```
+
+## Tooling
+`dotnet` CLI · `#!/usr/bin/env bash` shebangs · `compose[.<env>].yml` naming with Alpine images · `CLAUDE_NOTES.md` maintained per repo with [✅ SUCCESS] / [⚠️ NEEDS IMPROVEMENT] / [❌ AVOID] entries.
+
+## Companion skills
+Structure → `vertical-slice-architecture` · messaging → `servicebus-patterns`, `saga-orchestration` · data → `efcore-migration-safety` · APIs → `api-contracts` · payments → `iso20022-payments` · ledger → `ledger-modeling` · compliance → `pci-secure-coding`, `secure-logging`, `sox-change-control` · auth → `okta-oidc-bff` · deploy → `k8s-onprem-deploy` · telemetry → `otel-observability` · tests → `dotnet-testing`.

@@ -1,0 +1,6 @@
+{
+  "name": "fintech-backend",
+  "version": "1.0.0",
+  "description": "Enterprise C# .NET banking microservices: vertical slices, Service Bus outbox/sagas, EF Core migration safety, ISO 20022, double-entry ledger, PCI/SOX/SOC2/GLBA enforcement.",
+  "author": "zautke"
+}

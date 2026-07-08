@@ -1,0 +1,83 @@
+---
+name: dnd-architecture
+description: Drag-and-drop reference for React 19 using @dnd-kit next-gen (v0.x plugin API) and pragmatic-drag-and-drop. MUST be consulted for any sortable list, kanban, reorderable table or tree, widget grid, file-drop zone, or anything described as "drag", "reorder", "rearrange", or "move items around". Covers library choice, the v0.x API (which differs from the v6 API most examples show), persistence, and keyboard accessibility.
+---
+
+# Drag & Drop Architecture
+
+## 1. Pick the library deliberately
+
+| Need | Use |
+|---|---|
+| Sortable lists, kanban, grids, trees, table rows | **`@dnd-kit/react`** (next-gen v0.x) |
+| OS file drops, dragging text/URLs in from outside the browser, cross-window drag | **`@atlaskit/pragmatic-drag-and-drop`** |
+| Free-form positional dragging / gesture physics | Framer Motion `drag` (not a sortable solution) |
+| Anything | **not** `react-beautiful-dnd` — unmaintained, no React 19 guarantee |
+
+If the repo still has `react-beautiful-dnd` or `@hello-pangea/dnd`, treat migration as scoped work, not a drive-by rewrite.
+
+## 2. @dnd-kit next-gen — the API most examples get wrong
+
+The widely-circulated `DndContext` + `SortableContext` + `arrayMove(items, oldIndex, newIndex)` pattern is the **v6** API. The next-gen line (`@dnd-kit/react` v0.x) is different:
+
+```tsx
+'use client';
+import {DragDropProvider, useSortable} from '@dnd-kit/react';
+import {Feedback} from '@dnd-kit/dom';
+import {Accessibility} from '@dnd-kit/dom';
+
+function Board({items, onReorder}) {
+  return (
+    <DragDropProvider
+      plugins={(defaults) => [
+        ...defaults,
+        Feedback.configure({dropAnimation: {duration: 180, easing: 'ease-out'}}),
+        Accessibility.configure({
+          announcements: {
+            dragstart: ({operation: {source}}) => source && `Picked up ${source.id}`,
+            dragover: ({operation: {source, target}}) =>
+              source && target && `${source.id} is over ${target.id}`,
+            dragend: ({operation: {source, target}, canceled}) =>
+              !source ? undefined
+                : canceled ? 'Reorder canceled, original position restored'
+                : `Moved ${source.id} to ${target?.id ?? 'original position'}`,
+          },
+        }),
+      ]}
+      onDragEnd={(event) => { /* derive new order, call onReorder */ }}
+    >
+      {items.map((item, index) => <Row key={item.id} id={item.id} index={index} />)}
+    </DragDropProvider>
+  );
+}
+
+function Row({id, index}) {
+  const {ref, isDragSource} = useSortable({id, index});
+  return <tr ref={ref} data-dragging={isDragSource || undefined}>{/* ... */}</tr>;
+}
+```
+
+Key differences to internalize:
+- **`DragDropProvider`**, not `DndContext`. Behavior composes through **plugins**, passed as a function receiving the defaults so you extend rather than replace them.
+- **Per-entity plugin config**: `useDraggable({id, plugins: [Feedback.configure({feedback: 'clone', dropAnimation: null})]})`. Feedback config moved off the draggable entity onto the plugin.
+- **`useSortable({id, index})`** is position-driven; you don't hand a strategy an ordered id array.
+- Event types come from `DragDropEventMap` / `DragDropEventHandlers` (DOM EventMap pattern), with aliases `BeforeDragStartEvent`, `DragStartEvent`, `DragMoveEvent`, `DragOverEvent`, `DragEndEvent`, `CollisionEvent`.
+- `DragDropProvider` ships `'use client'` — App Router safe; keep server components above the provider.
+- `prefers-reduced-motion` is honored by built-in animations. Don't hand-roll that check.
+- Virtualized sorting batches entity-identity changes to a microtask to prevent collision oscillation — keep ids stable across windowing and let it work.
+
+**This line is pre-1.0.** Check the installed version (`node_modules/@dnd-kit/react/package.json`) or Context7 `/clauderic/dnd-kit` before writing code. Never emit remembered API.
+
+## 3. Persistence contract
+- Send the **resulting order** (array of ids) or a **fractional rank** — never a `{from, to}` delta, which corrupts under concurrent edits.
+- Fractional/lexo ranks for large or concurrently-edited lists; integer position rewrites only for small, single-owner lists.
+- Mutation carries an idempotency key. Optimistic local reorder is allowed (it's reversible); on failure, revert **and** announce the revert via the live region.
+
+## 4. Accessibility (non-negotiable)
+Keyboard drag must work: focus the handle, activate, arrow to move, Enter to drop, Escape to cancel. Announcements cover start / over / end / cancel. A mouse-only reorder fails the release gate — see `a11y-standards`.
+
+## 5. Banking-specific prohibition
+**Never make money movement a drag gesture.** Reordering payees, dashboard widgets, statement columns, approval queues: fine. "Drag account A onto B to transfer": rejected — accidental-drop risk on an irreversible action. Offer an explicit confirmed form instead.
+
+## 6. Testing
+Keyboard path in Vitest/Testing Library (pointer drag is unreliable in jsdom); pointer path in Playwright; always cover Escape-cancel and failed-persist revert. See `frontend-testing`.

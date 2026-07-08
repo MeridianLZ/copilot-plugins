@@ -1,0 +1,11 @@
+# INSTRUCTIONAL INSIGHTS
+
+_Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
+
+## 2026-07-19
+
+- **When auditing a "canonical → generated" repo layout**, don't trust a single source-of-truth claim in a README at face value — grep/read the actual generator script (`build/build.sh` here) to confirm which files it writes, because untracked files can accumulate outside that flow (e.g. the orphaned `guard-core.sh` copies found this session) and look canonical when they aren't.
+- **When a repo centralizes a cross-cutting concern (here: compliance enforcement) into one "shared" implementation but also ships per-consumer copies of a subset of the same logic**, always check both the shared implementation and the consumer-local copies before concluding a rule change is complete. Grep for the rule's distinctive regex/string across the whole repo, not just the file you edited.
+- **For bash-heavy repos with no formal test suite**, the fastest way to validate a rule/guard change is to pipe a synthetic JSON payload matching the tool's hook-input shape (`{"tool_input":{...}}`) directly into the guard script with `--dialect plain` (or whatever debug dialect exists) and check stdout + exit code. This repo's `guard-core.sh` supports exactly that pattern; look for equivalent `--dialect`/`--mode` debug affordances in other enforcement scripts before assuming you need the full agent runtime to test a hook.
+- **`jCodeMunch` `get_file_content`/`get_file_outline` on JSON and shell files** returned useful `file_summary` metadata (symbol counts, function names) even for non-traditional "code" files like `hooks.json` and `.sh` scripts — worth reaching for over a raw `Read` even on config-heavy repos like this one, per the user's global code-exploration policy.
+- **Continuity-file bootstrap**: when no continuity files exist yet, ground `PLANS.md`/`SESSION_LOG.md` in `git log` (commit hashes + dates) and `git status --short` rather than inventing timeline details — this repo had exactly one commit and a large uncommitted second phase, which is a useful pattern to name explicitly ("phase 1 committed, phase 2 in progress uncommitted") rather than treating all files as equally "current."

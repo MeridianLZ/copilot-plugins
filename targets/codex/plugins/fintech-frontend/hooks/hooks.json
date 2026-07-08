@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|apply_patch|Write|Edit)$",
+        "hooks": [
+          { "type": "command", "command": "./scripts/guard-core.sh --dialect codex", "timeout": 10, "statusMessage": "compliance guard" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "./scripts/frontend-context.sh", "timeout": 10 } ] }
+    ]
+  }
+}

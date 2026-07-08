@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Git pre-commit hook — enforces the fintech compliance guard on staged files.
+# Install:  ln -sf ../../scripts/pre-commit .git/hooks/pre-commit
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GUARD="$HERE/guard-core.sh"
+fail=0
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  case "$f" in
+    *.cs|*.ts|*.tsx|*.js|*.jsx|*.json|*.yml|*.yaml|*.env*|*.sql|*.md)
+      "$GUARD" --dialect plain --file "$f" || fail=1 ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACM)
+[ $fail -ne 0 ] && { echo ""; echo "Commit blocked by fintech compliance guard. Fix the findings above."; exit 1; }
+exit 0

@@ -1,0 +1,35 @@
+---
+description: Safe EF Core schema evolution: expand-contract, lock risk, idempotent SQL artifacts
+globs: ["**/Migrations/**/*.cs"]
+alwaysApply: false
+---
+
+
+# EF Core Migration Safety
+
+## Expand-contract — mandatory for anything destructive
+- **Release N (expand)**: add the new column/table nullable or defaulted; dual-write in code; backfill through a batched job, never inside the migration.
+- **Release N+1 (contract)**: after a verification window, drop the old column in its own migration.
+- Never: in-place rename (that's add + copy + drop across releases), type narrowing, or `NOT NULL` without a default on a populated table.
+
+This is exactly the path for ISO 20022 address restructuring — see `iso20022-payments`.
+
+## Lock-risk classification (annotate in the SQL header)
+| Operation | Risk |
+|---|---|
+| `ADD COLUMN` nullable/defaulted | LOW — metadata-only on modern SQL Server |
+| `CREATE INDEX` | REVIEW — hand-edit the script to `ONLINE = ON` |
+| `ALTER COLUMN` type/nullability | HIGH — table scan + Sch-M lock, needs a window |
+| Adding an FK | REVIEW — `WITH NOCHECK` plus separate validation on large tables |
+| Backfill | Batched loop in a runbook script, never one large `UPDATE` |
+
+## Artifact flow (SOX)
+1. `dotnet ef migrations add <TicketId>_<Name>`
+2. Review the generated C# line by line
+3. `dotnet ef migrations script --idempotent -o contracts/migrations/<date>-<name>.sql`
+4. Write the paired rollback script — **no rollback, no merge**
+5. Header the script with ticket id, author, reviewer, lock-risk table, estimated duration
+6. CI applies it. Local `dotnet ef database update` is hook-blocked.
+
+## Model conventions that prevent pain
+Concurrency token on every mutable aggregate · `decimal(19,4)` money · `datetime2` UTC · explicit max lengths (no accidental `nvarchar(max)`) · enums as strings with check constraints · ledger tables mapped without update/delete.
