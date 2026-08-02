@@ -1,0 +1,32 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.157.0
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    volumes:
+      - ./otel/collector.yml:/etc/otelcol-contrib/config.yml:ro
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    restart: unless-stopped
+
+  hook-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      TRACE_BRIDGE_HOST: 0.0.0.0
+      TRACE_BRIDGE_PORT: 4319
+      TRACE_DATA_DIR: /data
+      TRACE_CONTENT_MODE: ${TRACE_CONTENT_MODE:-hash}
+      TRACE_CONTENT_MAX_BYTES: ${TRACE_CONTENT_MAX_BYTES:-32768}
+      TRACE_CONSOLE_MODE: ${TRACE_CONSOLE_MODE:-pretty}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+      OTEL_SERVICE_NAME: claude-code-hook-bridge
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=development,service.namespace=agent-observability
+    volumes:
+      - ./.claude/telemetry:/data
+    ports:
+      - "127.0.0.1:4319:4319"
+    depends_on:
+      - otel-collector
+    restart: unless-stopped

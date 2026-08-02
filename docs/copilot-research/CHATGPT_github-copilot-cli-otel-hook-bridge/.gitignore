@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.env
+.copilot/telemetry/
+.github/hooks/copilot-otel-bridge.generated.json
