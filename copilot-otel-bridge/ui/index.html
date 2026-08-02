@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copilot OTel Bridge — Session Traces</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2129; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --ok: #3fb950; --err: #f85149; --warn: #d29922; --violet: #bc8cff;
+    --tool: #39c5cf; --user: #1f6feb; --open: #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden;
+    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+
+  /* ---------- Sidebar ---------- */
+  #sidebar {
+    width: 300px; min-width: 300px; background: var(--panel); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  #sidebar header {
+    padding: 12px 14px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #sidebar header h1 { font-size: 13px; font-weight: 600; flex: 1; }
+  #health { width: 8px; height: 8px; border-radius: 50%; background: var(--err); }
+  #health.up { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+  #session-list { overflow-y: auto; flex: 1; }
+  .session-item {
+    padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .session-item:hover { background: var(--panel-2); }
+  .session-item.active { background: var(--panel-2); border-left: 3px solid var(--accent); padding-left: 11px; }
+  .session-item .row1 { display: flex; align-items: center; gap: 7px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .dot.ok { background: var(--muted); }
+  .dot.error { background: var(--err); }
+  .dot.open { background: var(--open); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .session-item .sid { font-weight: 600; font-size: 12.5px; }
+  .session-item .when { color: var(--muted); font-size: 11.5px; margin-left: auto; }
+  .session-item .row2 { display: flex; gap: 6px; margin-top: 5px; flex-wrap: wrap; }
+  .badge {
+    font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  .badge.err { color: var(--err); border-color: var(--err); }
+  #empty-list { padding: 24px 14px; color: var(--muted); text-align: center; }
+
+  /* ---------- Main pane ---------- */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #placeholder { margin: auto; color: var(--muted); text-align: center; }
+  #conv-head {
+    padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel);
+    display: none; flex-wrap: wrap; gap: 4px 18px; align-items: baseline;
+  }
+  #conv-head .sid { font-size: 14px; font-weight: 600; }
+  #conv-head .meta { color: var(--muted); font-size: 11.5px; }
+  #live-toggle { margin-left: auto; color: var(--muted); font-size: 11.5px; display: flex; gap: 5px; align-items: center; }
+
+  #scroller { flex: 1; overflow-y: auto; display: none; }
+  #waterfall { padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  #waterfall h2, #feed-wrap h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+  .wf-row { display: flex; align-items: center; gap: 8px; height: 20px; }
+  .wf-label { width: 210px; min-width: 210px; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+  .wf-track { flex: 1; position: relative; height: 12px; background: var(--bg); border-radius: 3px; }
+  .wf-bar { position: absolute; top: 1px; height: 10px; border-radius: 3px; min-width: 3px; opacity: .9; }
+  .wf-bar.session { background: var(--accent); }
+  .wf-bar.turn { background: var(--user); }
+  .wf-bar.tool { background: var(--tool); }
+  .wf-bar.subagent { background: var(--violet); }
+  .wf-bar.error { background: var(--err); }
+  .wf-bar.openbar { background: repeating-linear-gradient(45deg, var(--open), var(--open) 4px, transparent 4px, transparent 8px); }
+  .wf-bar.heuristic { outline: 1px dashed var(--warn); }
+  .wf-point { position: absolute; top: 2px; width: 8px; height: 8px; transform: translateX(-4px) rotate(45deg); background: var(--muted); }
+  .wf-point.error { background: var(--err); }
+  .wf-dur { font-size: 10.5px; color: var(--muted); width: 64px; min-width: 64px; }
+
+  #feed-wrap { padding: 16px 18px 40px; max-width: 900px; }
+  .sys-divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; margin: 14px 0; }
+  .sys-divider::before, .sys-divider::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+  .chip {
+    display: inline-block; font-size: 11px; padding: 2px 9px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted); margin: 3px 0;
+  }
+  .chip.warn { border-color: var(--warn); color: var(--warn); }
+  .chip.err { border-color: var(--err); color: var(--err); }
+  .chip.hash { border-style: dashed; }
+  .msg { margin: 10px 0; display: flex; }
+  .msg .bubble {
+    max-width: 78%; padding: 9px 13px; border-radius: 12px; border: 1px solid var(--border);
+    background: var(--panel); white-space: pre-wrap; word-break: break-word;
+  }
+  .msg.user { justify-content: flex-end; }
+  .msg.user .bubble { background: #14283f; border-color: #1f4472; border-bottom-right-radius: 3px; }
+  .msg.agent .bubble { border-bottom-left-radius: 3px; }
+  .msg .who { font-size: 10.5px; color: var(--muted); margin-bottom: 3px; }
+  .card {
+    margin: 8px 0 8px 26px; border: 1px solid var(--border); border-left: 3px solid var(--tool);
+    border-radius: 8px; background: var(--panel); padding: 8px 12px;
+  }
+  .card.perm { border-left-color: var(--warn); }
+  .card.err { border-left-color: var(--err); }
+  .card.subagent { border-left-color: var(--violet); margin-left: 44px; }
+  .card .head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .card .name { font-weight: 600; font-size: 12.5px; }
+  .card .dur { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .card .body { margin-top: 5px; color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  .status-pill { font-size: 10px; padding: 0 6px; border-radius: 8px; border: 1px solid; }
+  .status-pill.ok { color: var(--ok); border-color: var(--ok); }
+  .status-pill.error { color: var(--err); border-color: var(--err); }
+  .status-pill.open { color: var(--open); border-color: var(--open); }
+  .status-pill.recovered { color: var(--warn); border-color: var(--warn); }
+  .ts { color: var(--muted); font-size: 10.5px; }
+</style>
+</head>
+<body>
+  <aside id="sidebar">
+    <header>
+      <span id="health" title="bridge health"></span>
+      <h1>Copilot OTel Bridge</h1>
+      <span class="ts" id="refresh-ts"></span>
+    </header>
+    <div id="session-list"><div id="empty-list">No sessions yet.<br>Run <code>copilot</code> with hooks installed.</div></div>
+  </aside>
+
+  <main id="main">
+    <div id="placeholder">
+      <p style="font-size:15px">Select a session</p>
+      <p style="margin-top:6px">Sessions appear as hook events arrive on the ledger.</p>
+    </div>
+    <div id="conv-head">
+      <span class="sid mono" id="head-sid"></span>
+      <span class="status-pill" id="head-status"></span>
+      <span class="meta" id="head-range"></span>
+      <span class="meta mono" id="head-cwd"></span>
+      <label id="live-toggle"><input type="checkbox" id="live" checked> live</label>
+    </div>
+    <div id="scroller">
+      <section id="waterfall"><h2>Span waterfall</h2><div id="wf-rows"></div></section>
+      <section id="feed-wrap"><h2>Conversation timeline</h2><div id="feed"></div></section>
+    </div>
+  </main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let selected = null;
+let lastTraceJson = "";
+
+function fmtTime(ms) { return new Date(ms).toLocaleTimeString([], { hour12: false }); }
+function fmtDur(ms) {
+  if (ms == null) return "";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
+}
+function shortId(id) { return id.length > 14 ? id.slice(0, 8) + "…" + id.slice(-4) : id; }
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function contentHtml(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return esc(value);
+  if (typeof value === "object" && !Array.isArray(value) && value.redacted === true) {
+    if (value.sha256) return `<span class="chip hash mono">sha256:${esc(String(value.sha256).slice(0, 12))}… · ${esc(String(value.bytes ?? "?"))} B</span>`;
+    return `<span class="chip hash">redacted</span>`;
+  }
+  const json = JSON.stringify(value, null, 1);
+  return esc(json.length > 600 ? json.slice(0, 600) + " …" : json);
+}
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  return res.json();
+}
+
+/* ---------- Sidebar ---------- */
+async function refreshSessions() {
+  try {
+    const [health, data] = await Promise.all([fetchJson("/health"), fetchJson("/api/sessions")]);
+    $("health").classList.toggle("up", health.ok === true);
+    $("refresh-ts").textContent = fmtTime(Date.now());
+    renderSessionList(data.sessions);
+  } catch { $("health").classList.remove("up"); }
+}
+
+function renderSessionList(sessions) {
+  const list = $("session-list");
+  if (!sessions.length) { list.innerHTML = '<div id="empty-list">No sessions yet.</div>'; return; }
+  list.innerHTML = sessions.map((s) => {
+    const dur = (s.ended_at_ms ?? s.last_event_at_ms) - s.started_at_ms;
+    return `<div class="session-item ${s.session_id === selected ? "active" : ""}" data-sid="${esc(s.session_id)}">
+      <div class="row1">
+        <span class="dot ${s.status}"></span>
+        <span class="sid mono">${esc(shortId(s.session_id))}</span>
+        <span class="when">${fmtTime(s.started_at_ms)} · ${fmtDur(dur)}</span>
+      </div>
+      <div class="row2">
+        <span class="badge">${s.turn_count} turns</span>
+        <span class="badge">${s.tool_count} tools</span>
+        ${s.subagent_count ? `<span class="badge">${s.subagent_count} subagents</span>` : ""}
+        ${s.error_count ? `<span class="badge err">${s.error_count} errors</span>` : ""}
+        <span class="badge">${s.event_count} events</span>
+      </div>
+    </div>`;
+  }).join("");
+  for (const el of list.querySelectorAll(".session-item")) {
+    el.addEventListener("click", () => selectSession(el.dataset.sid));
+  }
+}
+
+/* ---------- Trace pane ---------- */
+async function selectSession(sid) {
+  selected = sid;
+  lastTraceJson = "";
+  await refreshTrace(true);
+  refreshSessions();
+}
+
+async function refreshTrace(force) {
+  if (!selected) return;
+  let trace;
+  try { trace = await fetchJson(`/api/sessions/${encodeURIComponent(selected)}`); }
+  catch { return; }
+  const json = JSON.stringify(trace);
+  if (!force && json === lastTraceJson) return;
+  lastTraceJson = json;
+
+  const scroller = $("scroller");
+  const pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
+  $("placeholder").style.display = "none";
+  $("conv-head").style.display = "flex";
+  scroller.style.display = "block";
+  renderHead(trace);
+  renderWaterfall(trace);
+  renderFeed(trace);
+  if (pinned || force) scroller.scrollTop = scroller.scrollHeight;
+}
+
+function renderHead(trace) {
+  const sess = trace.spans.find((s) => s.kind === "session");
+  const first = trace.spans[0], last = trace.spans[trace.spans.length - 1];
+  const status = sess ? sess.status : "open";
+  $("head-sid").textContent = trace.session_id;
+  const pill = $("head-status");
+  pill.textContent = status + (sess && sess.status_message ? ` · ${sess.status_message}` : "");
+  pill.className = `status-pill ${status}`;
+  const startMs = sess ? sess.start_unix_ms : first ? first.start_unix_ms : 0;
+  const endMs = sess && sess.end_unix_ms ? sess.end_unix_ms : last ? (last.end_unix_ms ?? last.start_unix_ms) : 0;
+  $("head-range").textContent = `${new Date(startMs).toLocaleString()} → ${fmtTime(endMs)} (${fmtDur(endMs - startMs)})`;
+  const cwdEvent = trace.events.find((e) => e.payload.cwd);
+  $("head-cwd").textContent = cwdEvent ? cwdEvent.payload.cwd : "";
+}
+
+function renderWaterfall(trace) {
+  const spans = trace.spans;
+  const min = Math.min(...spans.map((s) => s.start_unix_ms));
+  const max = Math.max(...spans.map((s) => s.end_unix_ms ?? s.start_unix_ms), min + 1);
+  const range = max - min;
+  const pct = (ms) => `${(((ms - min) / range) * 100).toFixed(2)}%`;
+  const rows = [];
+  for (const s of spans.filter((x) => x.kind !== "point")) {
+    const end = s.end_unix_ms ?? max;
+    const label = s.kind + (s.tool_name ? ` · ${s.tool_name}` : "") + (s.agent_name ? ` · ${s.agent_name}` : "");
+    const cls = ["wf-bar", s.kind, s.status === "error" ? "error" : "", s.end_unix_ms == null ? "openbar" : "", s.heuristic ? "heuristic" : ""].join(" ");
+    rows.push(`<div class="wf-row">
+      <span class="wf-label mono" title="${esc(s.span_id)}">${esc(label)}</span>
+      <span class="wf-track"><span class="${cls}" style="left:${pct(s.start_unix_ms)};width:${(((end - s.start_unix_ms) / range) * 100).toFixed(2)}%"></span></span>
+      <span class="wf-dur">${fmtDur(end - s.start_unix_ms)}${s.end_unix_ms == null ? " · open" : ""}</span>
+    </div>`);
+  }
+  const pointRow = spans.filter((x) => x.kind === "point").map((p) =>
+    `<span class="wf-point ${p.status === "error" ? "error" : ""}" style="left:${pct(p.start_unix_ms)}" title="${esc(p.name)} @ ${fmtTime(p.start_unix_ms)}"></span>`
+  ).join("");
+  rows.push(`<div class="wf-row"><span class="wf-label">hook points</span><span class="wf-track">${pointRow}</span><span class="wf-dur"></span></div>`);
+  $("wf-rows").innerHTML = rows.join("");
+}
+
+function toolDuration(trace, ev) {
+  const span = trace.spans.find((s) => s.kind !== "point" && (s.end_event_id === ev.event_id || s.start_event_id === ev.event_id));
+  if (!span || span.end_unix_ms == null) return null;
+  return { dur: span.end_unix_ms - span.start_unix_ms, heuristic: span.heuristic === true };
+}
+
+function renderFeed(trace) {
+  const parts = [];
+  for (const ev of trace.events) {
+    const p = ev.payload;
+    const t = `<span class="ts">${fmtTime(Date.parse(p.timestamp) || ev.observed_at_unix_ms)}</span>`;
+    switch (p.hook_event_name) {
+      case "sessionStart":
+        parts.push(`<div class="sys-divider">session started ${p.source ? `(${esc(p.source)})` : ""} · ${t}</div>`); break;
+      case "sessionEnd":
+        parts.push(`<div class="sys-divider">session ended${p.reason ? ` · ${esc(p.reason)}` : ""} · ${t}</div>`); break;
+      case "userPromptSubmitted":
+        parts.push(`<div class="msg user"><div><div class="who" style="text-align:right">user · ${t}</div><div class="bubble">${contentHtml(p.prompt ?? p.initial_prompt)}</div></div></div>`); break;
+      case "userPromptTransformed":
+        parts.push(`<div style="text-align:right"><span class="chip" title="model-facing prompt was rewritten">prompt transformed → ${contentHtml(p.transformed_prompt)}</span></div>`); break;
+      case "preToolUse": {
+        const d = toolDuration(trace, ev);
+        parts.push(`<div class="card"><div class="head"><span class="name mono">⚙ ${esc(p.tool_name ?? "tool")}</span>
+          ${d ? `<span class="status-pill ok">done</span><span class="dur">${fmtDur(d.dur)}${d.heuristic ? " · heuristic" : ""}</span>` : `<span class="status-pill open">running</span>`}
+          <span class="dur">${t}</span></div>
+          <div class="body">${contentHtml(p.tool_input)}</div></div>`);
+        break;
+      }
+      case "postToolUse":
+        parts.push(`<div class="card"><div class="head"><span class="name mono">✓ ${esc(p.tool_name ?? "tool")} result</span><span class="dur">${t}</span></div><div class="body">${contentHtml(p.tool_result)}</div></div>`); break;
+      case "postToolUseFailure":
+        parts.push(`<div class="card err"><div class="head"><span class="name mono">✗ ${esc(p.tool_name ?? "tool")} failed</span><span class="status-pill error">error</span><span class="dur">${t}</span></div><div class="body">${contentHtml(p.error)}</div></div>`); break;
+      case "permissionRequest":
+        parts.push(`<div class="card perm"><div class="head"><span class="name">🔐 permission request</span><span class="dur">${t}</span></div><div class="body">${esc(p.tool_name ?? "")} ${contentHtml(p.tool_input)}</div></div>`); break;
+      case "subagentStart":
+        parts.push(`<div class="card subagent"><div class="head"><span class="name">🤖 subagent ${esc(p.agent_name ?? "")} started</span><span class="dur">${t}</span></div>${p.agent_type ? `<div class="body">type: ${esc(p.agent_type)}</div>` : ""}</div>`); break;
+      case "subagentStop": {
+        const d = toolDuration(trace, ev);
+        parts.push(`<div class="card subagent"><div class="head"><span class="name">🤖 subagent ${esc(p.agent_name ?? "")} finished</span>${d ? `<span class="dur">${fmtDur(d.dur)}${d.heuristic ? " · heuristic" : ""}</span>` : ""}<span class="dur">${t}</span></div><div class="body">${contentHtml(p.last_assistant_message ?? p.response)}</div></div>`);
+        break;
+      }
+      case "agentStop": {
+        const d = toolDuration(trace, ev);
+        parts.push(`<div class="msg agent"><div><div class="who">agent · ${t}</div><div class="bubble">turn complete${p.stop_reason ? ` · ${esc(p.stop_reason)}` : ""}${d ? ` · ${fmtDur(d.dur)}` : ""}</div></div></div>`);
+        break;
+      }
+      case "preCompact":
+        parts.push(`<div class="sys-divider">context compaction${p.trigger ? ` (${esc(p.trigger)})` : ""} · ${t}</div>`); break;
+      case "notification":
+        parts.push(`<div><span class="chip warn">🔔 ${esc(p.notification_type ?? "notification")} ${contentHtml(p.message)}</span> ${t}</div>`); break;
+      case "errorOccurred":
+        parts.push(`<div class="card err"><div class="head"><span class="name">⛔ error${p.error_type ? ` · ${esc(p.error_type)}` : ""}</span>${p.recoverable !== undefined ? `<span class="chip ${p.recoverable ? "warn" : "err"}">${p.recoverable ? "recoverable" : "fatal"}</span>` : ""}<span class="dur">${t}</span></div><div class="body">${contentHtml(p.error)}</div></div>`); break;
+      default:
+        parts.push(`<div><span class="chip">${esc(p.hook_event_name)}</span> ${t}</div>`);
+    }
+  }
+  $("feed").innerHTML = parts.join("");
+}
+
+refreshSessions();
+setInterval(refreshSessions, 3000);
+setInterval(() => { if ($("live").checked) refreshTrace(false); }, 2000);
+</script>
+</body>
+</html>

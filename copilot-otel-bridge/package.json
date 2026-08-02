@@ -1,0 +1,38 @@
+{
+  "name": "github-copilot-cli-otel-hook-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "GitHub Copilot CLI hook JSONL egress, live tail, and OpenTelemetry trace bridge",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsx watch src/bridge.ts",
+    "start": "node dist/src/bridge.js",
+    "hook": "node dist/src/hook-egress.js",
+    "tail": "tsx src/tail.ts",
+    "tail:native": "tsx src/tail-native.ts",
+    "hooks:generate": "tsx src/generate-hooks.ts",
+    "hooks:apply": "tsx src/generate-hooks.ts --apply",
+    "test": "tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
+    "@opentelemetry/resources": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/sdk-trace-node": "2.10.0",
+    "@opentelemetry/semantic-conventions": "1.43.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "tsx": "4.22.4",
+    "typescript": "7.0.2"
+  }
+}
