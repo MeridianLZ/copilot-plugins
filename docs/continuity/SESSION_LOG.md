@@ -13,6 +13,7 @@ _Newest first._
 - **End-to-end verification**: bridge + dockerized collector (`otel/collector.yml`, image 0.157.0) up; `scripts/smoke-test.sh` session → 12 events accepted + collector logged 16 spans under `service.name=github-copilot-cli-hook-bridge`; `/flush` clean; UI inspected via in-app browser (a11y-tree read + JS spot-checks — note the a11y tree surfaces `title` attributes over text for generic nodes; `textContent` checks confirmed correct labels).
 - **Commit**: `a2af5c3` "feat(copilot-otel): promote hook bridge to implementation with trace-viewer UI" on `feat/copilot-otel-bridge` (42 files). Not pushed.
 - **Left open**: real-`copilot` acceptance run; merge/push decision; production hardening checklist.
+- **Parallel records**: master-kb note `projects/fintech-marketplace/copilot-otel-bridge-copilot-cli-otel-hook-bridge-trace-viewer` (same facts, KB-linked); agent memory `~/.claude/projects/C--Users-me-dev-fintech-marketplace/memory/copilot-otel-bridge-implementation.md`.
 
 ## 2026-07-19 — `/init` (CLAUDE.md authoring) + `/continuity` (this set)
 
