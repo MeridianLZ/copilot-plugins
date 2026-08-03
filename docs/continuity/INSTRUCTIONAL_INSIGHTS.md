@@ -2,6 +2,15 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-02
+
+- **Offline-assembled AI deliverables carry phantom dependency pins.** A research stack validated "with stubs" can pin package versions that don't exist (here `typescript@6.0.0`). The first act after adopting such a deliverable is a real `pnpm install && pnpm check` — treat its VALIDATION.md as a claim, not evidence.
+- **A checksummed deliverable (`SHA256SUMS`) is a signal to fork, not edit.** Promote it wholesale to its implementation home and evolve the copy; the checksums keep the reference verifiable and diffable forever.
+- **Port collisions can masquerade as auth failures.** An OTLP exporter reporting "Unauthorized" may just be talking to a different service squatting the standard-ish port (14318 here). Before debugging credentials, check who owns the port (`Get-NetTCPConnection` → `Get-Process`). Then obey the no-generic-ports rule: pick from the >10000 free range and put it in `.env` as SSoT with compose interpolation.
+- **Reuse pairing logic as pure data for UIs.** Rather than teaching the UI OpenTelemetry, re-project the append-only event ledger into plain-JSON spans at read time (`trace-projector.ts` mirrors `SpanAssembler` rules without the OTel SDK). The ledger stays the single source of truth; the projector is trivially testable; the UI is a dumb renderer.
+- **Browser a11y-tree reads surface `title` attributes for generic nodes** — a waterfall label can look wrong in `read_page` while `textContent` is correct. Verify with a targeted `javascript_tool` `textContent` check before "fixing" rendering.
+- **Spool files are forensic gold in fail-open pipelines**: a spool entry proves the hook fired even when the bridge was down — check the spool before concluding hooks aren't installed.
+
 ## 2026-07-19
 
 - **When auditing a "canonical → generated" repo layout**, don't trust a single source-of-truth claim in a README at face value — grep/read the actual generator script (`build/build.sh` here) to confirm which files it writes, because untracked files can accumulate outside that flow (e.g. the orphaned `guard-core.sh` copies found this session) and look canonical when they aren't.

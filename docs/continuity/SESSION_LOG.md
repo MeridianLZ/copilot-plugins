@@ -2,6 +2,18 @@
 
 _Newest first._
 
+## 2026-08-02 — Copilot OTel hook bridge: implementation, ~/.copilot wiring, trace-viewer UI (scoped entry; the same session's master-kb `/agent-kb` dissolution is codified in the KB's `_governance/migration/` notes, not here)
+
+- **Source**: `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` (research date 2026-08-01, committed same day as `6506241`) used as the implementation guide. It ships `SHA256SUMS` → treated as a frozen reference; copied wholesale to top-level `copilot-otel-bridge/` and evolved there.
+- **SOTA verification (2026-08-02)**: WebSearch confirmed the guide current (2026-07-08 enterprise-managed OTel changelog already cataloged; one delta — managed settings now mention `otlp-grpc`); Context7 confirmed OTel JS pairing stable 2.10.0 ↔ experimental 0.221.0, api 1.9.1 fine on Node 24.11.1; GitHub MCP code search failed (`Bad credentials`) — web-search fallback used (`o11y-dev/opentelemetry-hooks` exemplar).
+- **Three defects fixed to make the guide build**: (1) `typescript@6.0.0` pin — that stable version was never published (only `6.0.0-beta`; latest 7.0.2) → bumped to 7.0.2; (2) `ATTR_HOST_NAME`/`ATTR_OS_TYPE` don't exist in stable `@opentelemetry/semantic-conventions` exports (incubating) → inlined literals in `src/otel.ts`; (3) collector host ports 14317/14318 collide with an existing local Docker stack (14318 answers HTTP 401 "Unauthorized"; 24317/24318 also taken) → `.env`-interpolated `OTEL_COLLECTOR_{GRPC,HTTP}_PORT` defaulting 27431/27432, README sed-synced, `src/config.ts` fallback updated.
+- **Gate**: `pnpm check` green — strict typecheck, 16/16 tests (12 guide + 4 new), build.
+- **~/.copilot wiring**: `pnpm hooks:generate/apply -- --scope user` → `~/.copilot/hooks/copilot-otel-bridge.json` (14 events, command transport → absolute path to built `hook-egress.js`, hash content mode, 2 s timeout). Egress validated per README recipe: sample payload → no stdout, exit 0, atomic spool file created while bridge down; spool replayed on bridge start ("replayed 1 spooled hook events"). `settings.json` untouched; native lane = per-shell env scripts. `otel_settings.jsonc` confirmed catalog-only (not auto-loaded).
+- **New feature — trace-viewer UI**: `src/trace-projector.ts` (pure-data re-projection of `hook-events.jsonl` into session/turn/tool/subagent + point spans, mirroring `SpanAssembler` FIFO pairing incl. heuristic flags and recovered-close semantics) + bridge routes `GET /ui`, `GET /api/sessions`, `GET /api/sessions/:id` + `ui/index.html` (self-contained, zero deps, dark theme): Sidebar with live session list/status dots/badges; ChatConversation pane with span-waterfall (bars + point diamonds) above a chronological chat feed rendering all 14 hook event types; hash-mode content chips (`sha256:… · N B`); 2–3 s polling.
+- **End-to-end verification**: bridge + dockerized collector (`otel/collector.yml`, image 0.157.0) up; `scripts/smoke-test.sh` session → 12 events accepted + collector logged 16 spans under `service.name=github-copilot-cli-hook-bridge`; `/flush` clean; UI inspected via in-app browser (a11y-tree read + JS spot-checks — note the a11y tree surfaces `title` attributes over text for generic nodes; `textContent` checks confirmed correct labels).
+- **Commit**: `a2af5c3` "feat(copilot-otel): promote hook bridge to implementation with trace-viewer UI" on `feat/copilot-otel-bridge` (42 files). Not pushed.
+- **Left open**: real-`copilot` acceptance run; merge/push decision; production hardening checklist.
+
 ## 2026-07-19 — `/init` (CLAUDE.md authoring) + `/continuity` (this set)
 
 - Ran `/init`. Confirmed no existing `CLAUDE.md` (`Glob **/CLAUDE.md` → no results).
