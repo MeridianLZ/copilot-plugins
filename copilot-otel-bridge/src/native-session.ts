@@ -250,10 +250,12 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
         break;
       }
       case 'assistant.turn_end': {
+        // turn_start/turn_end fire once per model interaction, several per
+        // user exchange. A replica turn = one user exchange, so keep the turn
+        // open (the next user.message closes it) and roll duration forward.
         if (event.agent_id === undefined && currentTurn) {
           currentTurn.status = 'ok';
           currentTurn.duration_ms = ms - currentTurn.timestamp_ms;
-          currentTurn = undefined;
         }
         break;
       }
