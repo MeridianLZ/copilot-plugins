@@ -35,7 +35,7 @@ const SECRET_PATTERNS: readonly { pattern: RegExp; replacement: string }[] = [
   }
 ];
 
-function redactSecrets(input: string): string {
+export function redactSecrets(input: string): string {
   return SECRET_PATTERNS.reduce((current, item) => current.replace(item.pattern, item.replacement), input);
 }
 

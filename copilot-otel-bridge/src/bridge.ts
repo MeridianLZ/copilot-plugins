@@ -8,7 +8,8 @@ import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
 import { SpanAssembler } from './span-assembler.js';
 import { conversationToMarkdown, projectConversation } from './conversation-projector.js';
-import { parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
+import { createPayloadDeduper } from './dedupe.js';
+import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
 function uiIndexPath(): string {
@@ -102,8 +103,16 @@ async function main(): Promise<void> {
     return true;
   };
 
+  const payloadDeduper = createPayloadDeduper(config.dedupeWindowMs);
+
   const consumeUnserialized = async (envelope: HookEnvelope): Promise<void> => {
     if (!rememberEventId(envelope.event_id)) {
+      duplicates += 1;
+      return;
+    }
+    // Multiple hook installations re-emit the same payload under fresh
+    // event_ids; identity is the payload itself (its ms timestamp included).
+    if (payloadDeduper.isDuplicate(envelope.payload, eventTimeMs(envelope))) {
       duplicates += 1;
       return;
     }

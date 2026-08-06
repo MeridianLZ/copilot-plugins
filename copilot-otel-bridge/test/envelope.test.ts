@@ -23,7 +23,9 @@ const config: BridgeConfig = {
   spoolDrainIntervalMs: 2_000,
   consoleMode: 'silent',
   otlpTracesEndpoint: 'http://127.0.0.1:14318/v1/traces',
-  serviceName: 'test'
+  serviceName: 'test',
+  dedupeWindowMs: 10_000,
+  copilotHome: '/tmp/copilot-home-test'
 };
 
 test('all 14 documented event names normalize from command-hook environment', () => {
