@@ -253,6 +253,35 @@ curl --fail --silent http://127.0.0.1:14329/health | jq
 
 Expected fields include `accepted`, `duplicates`, `failed`, `events_file`, and `otlp_traces_endpoint`.
 
+### Conversation viewer and export
+
+Open the local UI:
+
+```text
+http://127.0.0.1:14329/ui
+```
+
+The viewer reconstructs a **verbatim chronological conversation** from the hook ledger:
+
+- sidebar sort/filter (status, search, min tools, has-errors);
+- nested session → turn → tool/subagent timeline with indentation;
+- professional code blocks (hover: copy, line numbers, Aa font size);
+- export: copy, Markdown, JSON conversation document, PDF via print.
+
+Server APIs:
+
+```bash
+curl --fail --silent http://127.0.0.1:14329/api/sessions | jq
+curl --fail --silent http://127.0.0.1:14329/api/sessions/<sessionId>/conversation | jq
+curl --fail --silent http://127.0.0.1:14329/api/sessions/<sessionId>/conversation.md
+```
+
+Hook generator content mode is no longer hardcoded. Prefer:
+
+```bash
+pnpm hooks:generate -- --target /path/to/repo --content-mode hash --post-timeout-ms 250
+```
+
 ### 4. Generate hook configuration without modifying the target repository
 
 Run from this bridge repository:

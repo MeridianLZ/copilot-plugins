@@ -7,6 +7,7 @@ import { createEnvelope } from './envelope.js';
 import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
 import { SpanAssembler } from './span-assembler.js';
+import { conversationToMarkdown, projectConversation } from './conversation-projector.js';
 import { parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
@@ -180,8 +181,29 @@ async function main(): Promise<void> {
       }
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
         await ingestTail;
-        const sessionId = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
+        const remainder = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
+        const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
+        const sessionId = conversationMatch ? conversationMatch[1] ?? remainder : remainder;
         const ledger = await readLedger(config.eventsFile);
+        if (conversationMatch) {
+          const conversation = projectConversation(ledger, sessionId);
+          if (conversation.event_count === 0) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const format = conversationMatch[2] ?? url.searchParams.get('format') ?? 'json';
+          if (format === 'md' || format === 'markdown') {
+            const markdown = conversationToMarkdown(conversation);
+            response.writeHead(200, {
+              'content-type': 'text/markdown; charset=utf-8',
+              'content-disposition': `attachment; filename="conversation-${sessionId}.md"`
+            });
+            response.end(markdown);
+            return;
+          }
+          sendJson(response, 200, conversation);
+          return;
+        }
         const trace = projectSessionTrace(ledger, sessionId);
         if (trace.events.length === 0) {
           sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });

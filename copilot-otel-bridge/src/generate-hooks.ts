@@ -6,6 +6,7 @@ import {
   COPILOT_HOOK_EVENTS,
   isJsonObject,
   type CopilotHookEventName,
+  type ContentMode,
   type JsonObject,
   type JsonValue
 } from './types.js';
@@ -37,6 +38,19 @@ function argValue(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
+// CLI values override environment defaults for reproducible hook generation.
+function contentModeFromArgs(): ContentMode {
+  const value = argValue('--content-mode') ?? process.env['COPILOT_TRACE_CONTENT_MODE'] ?? 'hash';
+  if (value === 'off' || value === 'hash' || value === 'full') return value;
+  throw new Error(`--content-mode/COPILOT_TRACE_CONTENT_MODE must be off, hash, or full; received ${value}`);
+}
+
+function positiveIntegerArg(name: string, fallback: string): string {
+  const value = argValue(name) ?? fallback;
+  if (!/^[1-9]\d*$/.test(value)) throw new Error(`${name} must be a positive integer; received ${value}`);
+  return value;
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
@@ -66,7 +80,9 @@ function commandHandler(
   sourceRoot: string,
   egressPath: string,
   dataDir: string,
-  bridgeUrl: string
+  bridgeUrl: string,
+  contentMode: ContentMode,
+  postTimeoutMs: string
 ): JsonObject {
   const node = process.execPath;
   return {
@@ -79,8 +95,8 @@ function commandHandler(
       COPILOT_HOOK_EVENT: event,
       COPILOT_TRACE_BRIDGE_URL: bridgeUrl,
       COPILOT_TRACE_DATA_DIR: dataDir,
-      COPILOT_TRACE_CONTENT_MODE: 'hash',
-      COPILOT_TRACE_POST_TIMEOUT_MS: '250'
+      COPILOT_TRACE_CONTENT_MODE: contentMode,
+      COPILOT_TRACE_POST_TIMEOUT_MS: postTimeoutMs
     },
     timeoutSec: 2
   };
@@ -142,6 +158,8 @@ async function main(): Promise<void> {
   const egressPath = path.join(sourceRoot, 'dist', 'src', 'hook-egress.js');
   const dataDir = path.resolve(argValue('--data-dir') ?? path.join(sourceRoot, '.copilot', 'telemetry'));
   const bridgeUrl = argValue('--url') ?? 'http://127.0.0.1:14329/hooks';
+  const contentMode = contentModeFromArgs();
+  const postTimeoutMs = positiveIntegerArg('--post-timeout-ms', '250');
   if (transport === 'http' && !argValue('--url')) {
     throw new Error('--transport http requires --url https://collector.example/hooks');
   }
@@ -155,7 +173,7 @@ async function main(): Promise<void> {
 
   for (const event of selectedEvents) {
     const handler = transport === 'command'
-      ? commandHandler(event, sourceRoot, egressPath, dataDir, bridgeUrl)
+      ? commandHandler(event, sourceRoot, egressPath, dataDir, bridgeUrl, contentMode, postTimeoutMs)
       : httpHandler(event, bridgeUrl);
     hooks[event] = [...removeOurHandlers(existingHooks[event]), handler];
   }
