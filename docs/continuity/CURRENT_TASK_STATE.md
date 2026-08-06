@@ -1,34 +1,32 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-06 (scope: copilot-otel-bridge hardening + conversation UI)_
+_Last updated: 2026-08-06 (post commit/push + MCP peer live-fire)_
 
 ## Where things stand
 
-**copilot-otel-bridge level-up is implemented and verified locally, uncommitted.** Working tree under `copilot-otel-bridge/`:
+**copilot-otel-bridge level-up is committed and pushed** on `feat/copilot-mcp`:
 
-| Area | Status |
+| Commit | Summary |
 |---|---|
-| Dockerfile UI copy | Done — runtime stage `COPY ui ./ui` |
-| Content-mode split-brain | Done — `generate-hooks` honors `--content-mode` / env + `--post-timeout-ms` |
-| Smoke failure coverage | Done — `postToolUseFailure` + `errorOccurred` in both smoke scripts |
-| Conversation projector | Done — `src/conversation-projector.ts` + tests |
-| Bridge export APIs | Done — `GET /api/sessions/:id/conversation[.md]` |
-| Conversation UI | Done — nested timeline, sidebar sort/filter, code-block toolbar, MD/JSON/PDF export |
-| Validation | `pnpm check` **18/18** pass; live smoke `smoke-session-1785975144` = 15 events / 2 tools / 2 errors; `/ui` 200 |
+| `59f6eb8` | feat(copilot-otel): conversation UI, export APIs, hardening |
+| `8e797d8` | docs(continuity): OTel level-up record |
+| `0c17ce6` | docs(copilot-otel): MCP peer live-fire runbook |
 
-Bridge process on **:14329** was restarted during verification and is healthy. Collector on 27431/27432 still assumed up from prior sessions.
+**MCP peer live-fire PASS** — outer session `d9d26f83-8845-451a-919a-797dbf51f8d5`:
+- Tools: copilot-mcp ping/marco/ask + powershell
+- Hook lane: 34 events
+- Native lane: invoke_agent, chat grok-4.5, execute_tool copilot-mcp-*, powershell
+- UI/export verified; runbook local + KB
 
-**copilot-mcp workstream remains complete & pushed** on `feat/copilot-mcp` (`3fa0f1e..db436b2`). No change this session.
+Bridge UI: http://127.0.0.1:14329/ui
 
 ## Immediate next step
 
-1. **Review + commit** the uncommitted `copilot-otel-bridge/` delta (prefer atomic commits: hardening, conversation projector/API, UI, docs).
-2. Optional: real-`copilot` dual-lane acceptance (hook already proven; re-check native GenAI spans + `/ui` render after commit).
-3. Merge/PR decisions still open for both `feat/copilot-otel-bridge` and `feat/copilot-mcp`.
+1. Open `/ui`, select session `d9d26f83…`, exercise export.
+2. Optional PR for `feat/copilot-mcp` (includes copilot-mcp package + otel level-up + runbook).
+3. Optional: nested-peer hook parity / conversation projector race follow-ups (see runbook §12).
 
-## Key decisions this session (2026-08-06)
+## Key pointers
 
-- Dual-lane architecture stays: native GenAI = execution authority; hooks = lifecycle/governance; links not invented parents.
-- Conversation export is **server-authoritative** (`conversation-projector` + MD) with UI client fallback.
-- UI remains a single static `ui/index.html` (zero npm UI build); code-block polish is vanilla CSS/JS.
-- Smoke scripts remain HTTP fixtures against the bridge (not full command-hook egress path); failure/error events are now included.
+- Local runbook: `copilot-otel-bridge/docs/MCP_RUNBOOK.md`
+- KB: `projects/fintech-marketplace/copilot-otel-bridge — MCP Peer Live-Fire Runbook 2026-08-06.md`
