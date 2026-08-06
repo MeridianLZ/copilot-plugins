@@ -2,6 +2,14 @@
 
 _Newest first._
 
+## 2026-08-06 (late) - trace UI taken over → full conversation replica shipped
+
+- **Request**: take over the trace UI (another agent's work, "falling VERY short"); browse 6-10 rich sessions with screenshots, live-fire a copilot-mcp session watching real-time arrival, chase every missing span to its root, then plan + implement to deployable.
+- **Root causes found (all evidence-backed)**: (1) TWO identical hook files in `~/.copilot/hooks/` (install script's generate+apply both wrote `.json`) → every event captured twice ~600 ms apart under fresh `event_id`s; dedupe keyed on `event_id` could never fire. (2) `hash` content mode → sha256 chips, no content. (3) NO hook event carries main-agent assistant prose (verified vs official hooks reference; only `subagentStop` has text). (4) The verbatim substrate `~/.copilot/session-state/<id>/events.jsonl` (user/assistant messages, reasoningText, toolCallId/turnId, subagent toolCallId == child hook session id, permissions, usage) was read by NO code despite `transcript_path` being captured.
+- **Shipped** on `feat/copilot-otel-replica` (7 commits `ed40729..c6fdebb`, pushed): preview artifact renamed off `.json` + self-heal delete; payload-hash dedupe at ingest + projection (repairs historical 2× ledger read-time); `native-session.ts` native-first projector (chunk reassembly by messageId/chunkIndex, joins by toolCallId/turnId/requestId, parentId ignored, redactSecrets over all native strings, encrypted reasoning = marker only); `native-cache.ts` incremental byte-offset reader (UI poll is the tick); conversation doc 1.1.0 (`source`, `model`, `usage`); UI feed rewritten to render the doc (assistant markdown bubbles + model chips + reasoning collapsibles, tool cards, nested subagent conversations with open-child links, permission rows, usage footer, waterfall min/max fixed); turn = user exchange (not model interaction).
+- **Acceptance**: 34/34 tests; smoke = hooks-only fallback renders once; `6baa6c99…` renders as a true replica (verbatim prompt, 168 assistant messages incl. "I'll map the bridge…", 5 subagent conversations cross-linked, AIU footer); fresh live session `d6caf69a…` appeared verbatim (bold/fence/inline markdown correct) within ~2-4 s. `.md` export mirrors.
+- **SOTA (2026-08-06)**: events.jsonl undocumented (copilot-cli#3551) but mirrors documented SDK session event model — guards loose, hooks-only fallback retained; `assistant.reasoning`/`reasoningText` readable model-permitting; native OTel full content possible via `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`; prior art mitsha-microsoft/copilot-session-explorer.
+
 ## 2026-08-06 - copilot-otel-bridge: hardening + conversation UI level-up
 
 - **Request**: SOTA research (team), exercise all spans, then level-up the bridge: harden known issues and ship a professional conversation viewer (verbatim chronological nested UI, sidebar filters, code-block toolbar, MD/JSON/PDF export).

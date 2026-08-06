@@ -2,6 +2,16 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-06 late (conversation replica)
+
+- **Correction:** test count gate is now **34** node:test cases (`pnpm check`), superseding the 18 noted earlier on 2026-08-06.
+- **Invariant:** never place two `*.json` copies of the bridge hook config in a live Copilot hooks dir — Copilot loads every `*.json` and every event fires once per file. Generator previews are `*.generated.preview` (`generate-hooks.ts targetPaths()`); `--apply` deletes stale `*.generated.json`.
+- **Invariant:** hook-event identity = sha256 of `stableJson(payload)` within `COPILOT_TRACE_DEDUPE_WINDOW_MS` (payload `timestamp` is ms-precision, so true collisions ≈ nil). `event_id` is minted per egress process and is NOT an identity across hook installs.
+- **Invariant:** the conversation replica is projected **native-first** from `$COPILOT_HOME/session-state/<session_id>/events.jsonl`; hook lane is a governance overlay and the fallback (`source: hooks-only`) for sessions with no transcript (smoke/remote). No hook event carries main-agent assistant prose (only `subagentStop` has text) — verified against the official hooks reference 2026-08-06.
+- **Native stream facts (copilot CLI 1.0.79-5):** envelope `{type,data,id,timestamp,parentId,agentId?}`; `parentId` unreliable — join on `turnId`/`toolCallId`/`requestId`; `assistant.message` chunks reassemble by `messageId`+`chunkIndex`; subagent `toolCallId` == the child hook-lane `session_id` (cross-link key); `assistant.turn_start/end` fire per model interaction — a replica turn is bounded by user messages instead; format undocumented upstream (copilot-cli#3551) → parse per-line defensively, ignore unknown types.
+- **Security seam:** native transcript strings bypass hook sanitization — `redactSecrets` must run over ALL native content before it leaves the bridge; `reasoningOpaque`/`encryptedContent` are never shipped (marker only, `reasoningText` renders when present).
+- **Pitfall:** `mcp__copilot-mcp__ask` `tool_calls` summaries report `tool:"unknown"` — copilot-mcp bridge summary bug (its event parsing predates SDK field changes), separate workstream.
+
 ## 2026-08-06 (copilot-otel-bridge level-up)
 
 - **Invariant:** conversation export is server-authoritative via `src/conversation-projector.ts` (`projectConversation` + `conversationToMarkdown`). UI may fall back to client-side markdown, but MD/JSON export buttons should prefer `/api/sessions/:id/conversation[.md]`.

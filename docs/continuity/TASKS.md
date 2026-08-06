@@ -1,5 +1,21 @@
 # TASKS
 
+## Done — 2026-08-06 late (conversation replica, branch `feat/copilot-otel-replica`, pushed)
+
+- [x] Investigate trace UI shortfall: click-through 6 rich sessions + live copilot-mcp session; root-caused all missing spans (double hook install ×2 events; hash content; hook lane lacks assistant prose; native session-state transcript unread; UI raw-JSON fallthrough).
+- [x] Fix capture: delete dup `~/.copilot/hooks/copilot-otel-bridge.generated.json`; generator previews non-`.json` + `--apply` self-heal (`ed40729`).
+- [x] Payload-hash dedupe at ingest + projection; sessionEnd guard; session reopen-on-late-events (`66f67cf`).
+- [x] Native-first conversation projection: `native-session.ts` + `native-cache.ts`, doc schema 1.1.0 w/ source/model/usage, secrets scrubbed, encrypted reasoning = marker (`0b96ba2`, `221f62d`).
+- [x] UI replica renderer: md bubbles, model chips, reasoning, tool cards, nested subagents + child links, permission rows, usage footer, waterfall fix (`1129f1f`, `2d492a7`).
+- [x] Tests 18 → **34**; docs (`c6fdebb`); live-fire acceptance: 6baa replica render + fresh session verbatim ~2-4 s.
+
+## Open — conversation replica
+
+- [ ] Merge/PR decision for `feat/copilot-otel-replica`.
+- [ ] copilot-mcp workstream: `ask` tool_calls report `tool:"unknown"` — fix its event-summary parsing.
+- [ ] Optional: flip `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in env scripts if span-attribute content wanted in the OTel lane.
+- [ ] Optional: model multi-epoch resumed sessions (session.resume) instead of one continuous wall-clock span.
+
 ## Done — 2026-08-06 (copilot-otel-bridge level-up)
 
 - [x] SOTA refresh for agent/MCP/GenAI tracing (dual-lane, links, privacy fail-closed, Development-status GenAI pin).

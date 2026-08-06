@@ -2,6 +2,14 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-06 late (replica takeover)
+
+- **When a rendering looks doubled, check the capture layer before the renderer.** Every span appearing exactly twice (one clean, one "recovered 0 ms" ghost) was two hook files firing — visible in 60 seconds by grouping ledger lines on `(session, event, timestamp)`. Smoke sessions (which bypass hooks) rendering singly was the decisive control.
+- **Idempotency keys must be minted from content, not by the emitter.** A per-process `randomUUID()` event_id can never dedupe across N installations; hash the payload (its ms timestamp makes it a natural identity).
+- **When a UI can't show X, ask whether X was ever captured.** The replica gap was 3 layers deep: dup capture → hashed content → an event vocabulary that structurally lacks assistant prose. No renderer work could fix it; the fix was adopting the substrate that already had everything (`session-state/events.jsonl`), discovered via a `transcript_path` field the code carried but never dereferenced.
+- **Browse-first, then seam-map with subagents, then design.** Click-through + live-fire produced the root-cause list in ~30 min; three parallel Explore/research agents then pinned every file:line and SOTA fact; the Plan agent caught a stale assumption (the "uncommitted" work had been committed mid-investigation by the parallel session).
+- **Verify mid-implementation against the richest real dataset, not just fixtures.** Rendering 6baa (854 events, 5 subagents) between phases exposed the turn-semantics bug (83 native turn_starts vs 12 user exchanges) that unit fixtures were too small to show.
+
 ## 2026-08-06
 
 - **When a research pass surfaces concrete defects, fix them before polishing UI.** The Docker UI miss and content-mode split-brain would have made the conversation viewer look "broken in prod" even if the static HTML was excellent. Ship the fail-path plumbing first, then the renderer.
