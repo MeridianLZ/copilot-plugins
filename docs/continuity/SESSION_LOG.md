@@ -2,6 +2,23 @@
 
 _Newest first._
 
+## 2026-08-06 - copilot-otel-bridge: hardening + conversation UI level-up
+
+- **Request**: SOTA research (team), exercise all spans, then level-up the bridge: harden known issues and ship a professional conversation viewer (verbatim chronological nested UI, sidebar filters, code-block toolbar, MD/JSON/PDF export).
+- **Research (prior turn, still binding)**: dual-lane OTel is correct; GenAI/MCP conventions remain Development-status - pin + compatibility layer; links over invented parentage; privacy fail-closed; sample 100% locally / tail-sample errors at scale. Primary sources: OTel GenAI spans, MCP `_meta` propagation, sensitive-data guidance.
+- **Hardening shipped (uncommitted)**:
+  - `Dockerfile`: runtime `COPY ui ./ui` (fixes container `/ui` 404).
+  - `src/generate-hooks.ts`: `--content-mode off|hash|full` and env `COPILOT_TRACE_CONTENT_MODE`; `--post-timeout-ms` (fixes hardcoded hash split-brain).
+  - `scripts/smoke-test.{ps1,sh}`: ordered `postToolUseFailure` + `errorOccurred` after success path.
+  - `VALIDATION.md` + `README.md`: 18-test gate, conversation APIs, content-mode flags.
+- **Conversation stack shipped (uncommitted)**:
+  - `src/conversation-projector.ts` + `test/conversation-projector.test.ts` — deterministic nested tree + markdown export.
+  - `src/bridge.ts` routes: `GET /api/sessions/:id/conversation` and `.../conversation.md`.
+  - `ui/index.html` rewrite: sidebar sort/filter/search; nested session→turn→tool/subagent; collapsible waterfall; code blocks with hover copy / line numbers / Aa±; export copy/MD/JSON/PDF; live poll preserved; export prefers server MD/JSON with client fallback.
+- **Verification**: `pnpm check` 18/18; bridge restarted on 14329; smoke `smoke-session-1785975144` → conversation API `event_count=15 tool_count=2 error_count=2`; `/ui` 200 with export+code-toolbar markers.
+- **Prior live evidence retained**: synthetic full-surface coverage session + real CLI session with native `invoke_agent`/`chat`/`execute_tool` and hook lifecycle spans at collector.
+- **Not committed**. Branch context: work lives under `copilot-otel-bridge/` alongside earlier `feat/copilot-otel-bridge` history; commit split recommended before PR.
+- **Continuity**: this `/continuity` pass rewrote CURRENT_TASK_STATE, updated PLANS/TASKS, prepended this SESSION_LOG entry, appended REMEMBER + INSTRUCTIONAL_INSIGHTS. Removed accidental empty `copilot-otel-bridge/docs/continuity/` dir. Canonical set remains `docs/continuity/` only.
 ## 2026-08-05 — copilot-mcp: full Copilot CLI wrapped as multi-transport MCP server + @agent-fannypack/mcp signals
 
 - **Request**: wrap the FULL Copilot CLI process, expose tools + an `ask` tool queryable by *other CLI agents* over MCP; stdio + Streamable HTTP + WebSocket transports; JSON-RPC 2.0 TS typings + helper classes; research current MCP specs; implement, load, live-fire verify. Mid-plan pivot: factor three agent-to-agent signals (ping, marco/polo, blast timer) into a reusable npm package `@agent-fannypack/mcp`.
@@ -38,3 +55,4 @@ _Newest first._
 - Verified (Bash, Git Bash on Windows): `jq --version` → 1.8.1. `guard-core.sh --dialect plain` denies a `kubectl delete pod x` command (`BLOCKED: Direct cluster mutation blocked...`, exit 1) and a `double Amount;` C# snippet (`BLOCKED: Floating-point money type...`, exit 1); allows `ls` (exit 0). `bash -n build/build.sh` → syntax OK. Did **not** run the full `build/build.sh` (would rewrite dirty `targets/`).
 - User then ran `/model` → Sonnet 5, `/effort` → high, then `/continuity`.
 - This continuity refresh: no prior continuity files existed in the repo (`Glob` for all six canonical names → no results); created all six fresh at repo root, grounded in git log (`f87c365` "Initial prototype", 2026-07-08, single commit) and current `git status --short` (README.md modified; AGENTS.md, CLAUDE.md, build/, plugins/*/scripts/guard-core.sh, shared/, targets/ all untracked).
+

@@ -2,6 +2,17 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-06 (copilot-otel-bridge level-up)
+
+- **Invariant:** conversation export is server-authoritative via `src/conversation-projector.ts` (`projectConversation` + `conversationToMarkdown`). UI may fall back to client-side markdown, but MD/JSON export buttons should prefer `/api/sessions/:id/conversation[.md]`.
+- **Invariant:** `trace-projector.ts` and `conversation-projector.ts` both depend on the same FIFO lifecycle pairing semantics as `span-assembler.ts`. Change pairing rules in all three (+tests) together.
+- **Pitfall fixed:** Docker runtime image must `COPY ui ./ui` — bridge resolves `ui/index.html` relative to package root; shipping only `dist/` 404s `/ui` in containers.
+- **Pitfall fixed:** generated command hooks previously hard-coded `COPILOT_TRACE_CONTENT_MODE=hash`, ignoring bridge/container env. Generator now takes `--content-mode` / env and `--post-timeout-ms`.
+- **Pitfall:** smoke scripts still POST the bridge HTTP API directly — they validate span assembly/export, not installed command-hook egress or spool replay. Do not treat a green smoke as full hook-install proof.
+- **UI contract (extended):** `/ui` is still a single zero-dep `ui/index.html`. Required affordances: sidebar sort/filter, nested chronological conversation, code-block hover toolbar (copy, line numbers, Aa±), export copy/MD/JSON/PDF. Print CSS hides chrome for PDF.
+- **Test count gate:** `pnpm check` expects **18** node:test cases after conversation projector tests (was 16).
+
+
 ## 2026-08-05 (copilot-mcp + @agent-fannypack/mcp)
 
 - **Invariant:** `agent-fannypack/mcp/` (`@agent-fannypack/mcp`) must stay app/vendor-agnostic — the three signals (ping, marco, blast timer) take injected hooks (`respond`, `onDetonate`, shared `timer`); never import copilot/bridge code into it.

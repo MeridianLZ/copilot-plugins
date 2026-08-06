@@ -1,5 +1,25 @@
 # TASKS
 
+## Done — 2026-08-06 (copilot-otel-bridge level-up)
+
+- [x] SOTA refresh for agent/MCP/GenAI tracing (dual-lane, links, privacy fail-closed, Development-status GenAI pin).
+- [x] Fix Dockerfile missing `ui/` copy in runtime image.
+- [x] Fix generate-hooks content-mode split-brain (`--content-mode` / env + `--post-timeout-ms`).
+- [x] Expand smoke scripts with ordered `postToolUseFailure` + `errorOccurred`.
+- [x] Add `conversation-projector.ts` (nested verbatim tree + markdown) and unit tests.
+- [x] Bridge APIs: `/api/sessions/:id/conversation` and `/conversation.md`.
+- [x] Rewrite `ui/index.html`: sidebar sort/filter, nested timeline, code-block toolbar, copy/MD/JSON/PDF export, live refresh.
+- [x] Verify: `pnpm check` 18/18; live smoke conversation coverage; `/ui` 200.
+
+## Open — copilot-otel-bridge (post level-up)
+
+- [ ] Commit the 2026-08-06 level-up (suggested split: hardening / projector+API / UI / docs).
+- [ ] Push/PR `feat/copilot-otel-bridge` (or successor branch) including prior `a2af5c3` + new commits.
+- [ ] Formal dual-lane acceptance note after commit: native GenAI spans + `/ui` render of a real session (hook lane already proven).
+- [ ] Production hardening leftovers: replace collector debug exporter, TLS/auth if non-loopback, retention, collector redaction allow-list.
+- [ ] Optional: smoke path that exercises real command-hook egress + spool replay (current smoke POSTs bridge HTTP directly).
+- [ ] Optional: unit/integration tests for heuristic FIFO links, open-span timeout recovery, bridge HTTP endpoints, hook generator.
+
 ## Done — 2026-08-05 (copilot-mcp + @agent-fannypack/mcp)
 
 - [x] Resolve the "python at the end of the following" referent — the user's pasted Gemini convo ending in a FastMCP `server.py` wrapping the deprecated `gh copilot` extension; read/understood, rejected as substrate in favor of `@github/copilot-sdk`.
@@ -30,7 +50,7 @@
 - [x] End-to-end verify: smoke session → JSONL ledger → spans at dockerized collector; `/flush` clean; UI inspected in browser.
 - [x] Commit `a2af5c3` on `feat/copilot-otel-bridge`.
 
-## Open — Copilot OTel bridge
+## Open — Copilot OTel bridge (historical; see post level-up above)
 
 - [ ] **Acceptance run**: real `copilot` session in a trusted repo with `scripts/copilot-otel-env.ps1` sourced — confirm native lane + hook lane both arrive, and the session renders in `/ui`. *(2026-08-05 update: the hook lane is CONFIRMED organically — the still-running bridge's ledger captured a real Copilot session `6baa6c99…` on 2026-08-03 incl. subagents and MCP tool calls. Remaining: native-lane arrival + `/ui` render check.)*
 - [ ] Decide whether to merge `feat/copilot-otel-bridge` → `main` and/or push.

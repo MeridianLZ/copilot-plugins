@@ -1,29 +1,34 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-05 (scope: copilot-mcp / @agent-fannypack/mcp workstream)_
+_Last updated: 2026-08-06 (scope: copilot-otel-bridge hardening + conversation UI)_
 
 ## Where things stand
 
-The **copilot-mcp wrapper is done, live-fire verified, and pushed** — branch `feat/copilot-mcp`, 7 atomic commits `3fa0f1e..db436b2` on origin, working tree clean for this workstream. Two packages:
+**copilot-otel-bridge level-up is implemented and verified locally, uncommitted.** Working tree under `copilot-otel-bridge/`:
 
-- `copilot-mcp/` — the full agentic Copilot CLI wrapped as an MCP server via `@github/copilot-sdk` 1.0.8 (SDK-spawned child over JSON-RPC; `COPILOT_MCP_CLI_URL` attaches to an external `copilot --headless`). 12 tools (`ask`, `session_create/list/events/destroy`, `models_list`, `status`, + signals). Three transports: stdio, Streamable HTTP, WebSocket — HTTP+WS share loopback port **27443** (`.env` SSoT), WS = SEP-1287-style upgrade on the same `/mcp` path via a custom Transport. MCP TS SDK **v2 stable 2.0.0** serves spec 2026-07-28 + legacy 2025-11-25 from one endpoint (Claude Code connects via legacy). Standalone JSON-RPC 2.0 typings/helpers in `src/jsonrpc/`.
-- `agent-fannypack/mcp/` — standalone `@agent-fannypack/mcp` (publish-ready, unpublished): ping (transport liveness), marco/polo (agent liveness through an injected ask path), blast-timer dead-man watchdog (`withCheckIn` makes every action call an implicit check-in; countdown zero ⇒ `onDetonate` blows the connection up to nothing).
+| Area | Status |
+|---|---|
+| Dockerfile UI copy | Done — runtime stage `COPY ui ./ui` |
+| Content-mode split-brain | Done — `generate-hooks` honors `--content-mode` / env + `--post-timeout-ms` |
+| Smoke failure coverage | Done — `postToolUseFailure` + `errorOccurred` in both smoke scripts |
+| Conversation projector | Done — `src/conversation-projector.ts` + tests |
+| Bridge export APIs | Done — `GET /api/sessions/:id/conversation[.md]` |
+| Conversation UI | Done — nested timeline, sidebar sort/filter, code-block toolbar, MD/JSON/PDF export |
+| Validation | `pnpm check` **18/18** pass; live smoke `smoke-session-1785975144` = 15 events / 2 tools / 2 errors; `/ui` 200 |
 
-**Verified** (all against the real Copilot process, 2026-08-05): stdio/HTTP/WS each pass tools/list + ping + `ask`→"4" + marco→"polo"; watchdog detonation observed killing the HTTP server (exit 1); cross-agent `claude -p --allowedTools mcp__copilot-mcp__ask` → "Paris". `pnpm check` green in both packages (13 tests total).
+Bridge process on **:14329** was restarted during verification and is healthy. Collector on 27431/27432 still assumed up from prior sessions.
 
-**Registered**: Claude Code user scope (`claude mcp list` → ✔ Connected; tools visible as `mcp__copilot-mcp__*` in new sessions) and `~/.copilot/mcp-config.json` (allowlisted: ping, marco, ask, session_list, status).
-
-**Working-tree caveat**: `copilot-otel-bridge/` modifications + new `src/conversation-projector.ts` (+test) are present but belong to a **parallel session** — preserve, don't commit/revert from this workstream. The OTel bridge from 2026-08-02 is still running (port 14329, healthy) and its ledger organically captured a real Copilot session on 2026-08-03 — hook-lane acceptance evidence for the phase-4 open item.
+**copilot-mcp workstream remains complete & pushed** on `feat/copilot-mcp` (`3fa0f1e..db436b2`). No change this session.
 
 ## Immediate next step
 
-1. User decisions: merge/PR `feat/copilot-mcp`; publish `@agent-fannypack/mcp` or keep local.
-2. (OTel leftover) formal acceptance close-out: native-lane arrival + `/ui` render of the 2026-08-03 real session.
+1. **Review + commit** the uncommitted `copilot-otel-bridge/` delta (prefer atomic commits: hardening, conversation projector/API, UI, docs).
+2. Optional: real-`copilot` dual-lane acceptance (hook already proven; re-check native GenAI spans + `/ui` render after commit).
+3. Merge/PR decisions still open for both `feat/copilot-otel-bridge` and `feat/copilot-mcp`.
 
-## Key decisions this session
+## Key decisions this session (2026-08-06)
 
-- Substrate = `@github/copilot-sdk` server-mode wrap, NOT the deprecated `gh copilot` extension the user's pasted Python reference wrapped.
-- MCP TS SDK v2 (user-confirmed "v2 beta" pre-release choice; v2 went **stable 2.0.0** mid-build and was used).
-- WS is a custom Transport (spec has no WS; SEP-1287 semantics: same endpoint, one JSON-RPC message per frame, `hasPerRequestStream` unset).
-- One shared `BlastTimer` + one `CopilotBridge` per process; expiry hooks registered once per process (stateless HTTP builds a fresh McpServer per request).
-- Default permission policy `readonly` (Copilot may read/search; write/shell rejected) — `COPILOT_MCP_PERMISSIONS=approve-all` opts out.
+- Dual-lane architecture stays: native GenAI = execution authority; hooks = lifecycle/governance; links not invented parents.
+- Conversation export is **server-authoritative** (`conversation-projector` + MD) with UI client fallback.
+- UI remains a single static `ui/index.html` (zero npm UI build); code-block polish is vanilla CSS/JS.
+- Smoke scripts remain HTTP fixtures against the bridge (not full command-hook egress path); failure/error events are now included.

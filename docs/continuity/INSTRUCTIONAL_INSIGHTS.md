@@ -2,6 +2,16 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-06
+
+- **When a research pass surfaces concrete defects, fix them before polishing UI.** The Docker UI miss and content-mode split-brain would have made the conversation viewer look "broken in prod" even if the static HTML was excellent. Ship the fail-path plumbing first, then the renderer.
+- **Re-project the ledger for every consumer.** OTel spans, the waterfall projector, and the conversation tree are three views of one append-only JSONL truth. Keeping a pure-data projector (no SDK) makes UI/export deterministic and unit-testable without a collector.
+- **Prefer server-side verbatim export for anything users will share.** Client-only markdown diverges as the UI evolves; a `/conversation.md` endpoint freezes the transcript contract and lets the UI just download it.
+- **Code-block toolbars belong on hover with event delegation.** One document-level click handler for copy/line-numbers/font-size scales to every block without re-binding after live refresh.
+- **Smoke tests should include at least one ERROR path.** Happy-path-only smoke left `postToolUseFailure` and `errorOccurred` unproven until coverage forced them — bake those into the default smoke.
+- **Subagent teams are useful for parallel research/implementation, but the controller must integrate.** Hardening agent + UI agent + coordinator-owned conversation API avoided merge conflicts by clear file ownership; still required a final export-wiring pass on `ui/index.html`.
+
+
 ## 2026-08-05
 
 - **A pasted reference implementation defines intent, not architecture.** The user's Python `server.py` (FastMCP wrapping `gh copilot`) named the *goal* — copilot callable by other agents over MCP — while wrapping a deprecated substrate. Extract the requirement list from such references, then re-derive the substrate from current SOTA (`@github/copilot-sdk` here) instead of porting the reference.
