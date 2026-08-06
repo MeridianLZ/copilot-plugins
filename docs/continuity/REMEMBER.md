@@ -2,6 +2,17 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-05 (copilot-mcp + @agent-fannypack/mcp)
+
+- **Invariant:** `agent-fannypack/mcp/` (`@agent-fannypack/mcp`) must stay app/vendor-agnostic — the three signals (ping, marco, blast timer) take injected hooks (`respond`, `onDetonate`, shared `timer`); never import copilot/bridge code into it.
+- **Invariant:** blast-timer/`onExpire` hooks register **once per process**, never inside a per-request server factory — `createMcpHandler` builds a fresh `McpServer` per request (stateless), and per-request registration stacks duplicate detonate callbacks (observed: 11 dupes before the fix in `52b7990`).
+- **MCP SDK v2 (2.0.0 stable)**: the monolithic `@modelcontextprotocol/sdk` is retired → `@modelcontextprotocol/{server,client,node}`; `serveStdio` from `@modelcontextprotocol/server/stdio`; client transports: `StreamableHTTPClientTransport` in the main export, `StdioClientTransport` under `/stdio`; **no WebSocket transport exists** (SEP-1287 is an open PR) — WS is a custom `Transport` (one JSON-RPC message per frame, same `/mcp` endpoint, `hasPerRequestStream` unset because WS shares one channel like stdio).
+- **Copilot SDK facts (1.0.8, public preview — pin exact versions):** `session.sendAndWait(opts, timeout)` resolves on the idle signal (the completed-turn contract; NOT the last delta); answer text must filter to root-agent events (`event.agentId === undefined`) or sub-agent output duplicates in; permission decisions are `{kind:'approve-once'}`/`{kind:'reject'}` with request kinds shell/write/read/mcp/custom-tool; cleanup is `session.disconnect()` (resumable) vs `client.deleteSession()` (permanent); external server mode = `copilot --headless --port N` + `RuntimeConnection.forUri` (there is **no** `cliUrl` client option despite older docs).
+- **pnpm 11 gotcha:** build-script approval lives in `pnpm-workspace.yaml` under `allowBuilds:` — the old `package.json` `pnpm.onlyBuiltDependencies` field is ignored (warns). pnpm even scaffolds the yaml with placeholder text you must edit to `true`.
+- **Ports (this machine), updated:** 27431/27432 (OTel collector), 14329 (OTel bridge), **27443** (copilot-mcp HTTP+WS — one port carries both, WS via upgrade).
+- **Registration surfaces:** Claude Code user scope in `~/.claude.json` via `claude mcp add copilot-mcp` (tools surface as `mcp__copilot-mcp__*`); Copilot side in `~/.copilot/mcp-config.json` with a `tools:` allowlist (kept to ping/marco/ask/session_list/status to bound copilot→copilot recursion).
+- **Pitfall:** file:-protocol pnpm deps are copied at install — edits to the linked package don't propagate until reinstall. Use `link:` during co-development (`@agent-fannypack/mcp` is `link:../agent-fannypack/mcp` in copilot-mcp) and rebuild fannypack (`pnpm build`) before typechecking the consumer, since types resolve from its `dist/`.
+
 ## 2026-08-02 (Copilot OTel bridge)
 
 - **Invariant:** `docs/copilot-research/CHATGPT_*` deliverables are frozen references with `SHA256SUMS` — never edit in place. The runnable implementation lives at top-level `copilot-otel-bridge/`; evolve only there.

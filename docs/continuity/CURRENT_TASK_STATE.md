@@ -1,28 +1,29 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-02 (scope: Copilot OTel bridge workstream)_
+_Last updated: 2026-08-05 (scope: copilot-mcp / @agent-fannypack/mcp workstream)_
 
 ## Where things stand
 
-The Copilot CLI OTel hook bridge is **implemented, verified, and committed** (`a2af5c3` on `feat/copilot-otel-bridge`). `copilot-otel-bridge/` at repo root is the working stack (the `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` original is a frozen, checksummed reference — never edit it). The gate `pnpm check` is green (strict typecheck, 16/16 tests, build). A synthetic smoke session was verified through all four stages: hook egress → bridge JSONL ledger → reconstructed OTel spans → dockerized collector (16 spans received), and the trace-viewer UI at `http://127.0.0.1:14329/ui` was inspected in a browser (Sidebar session list + ChatConversation pane + span waterfall all rendering correctly, hash-mode content chips included).
+The **copilot-mcp wrapper is done, live-fire verified, and pushed** — branch `feat/copilot-mcp`, 7 atomic commits `3fa0f1e..db436b2` on origin, working tree clean for this workstream. Two packages:
 
-`~/.copilot` was updated: `hooks/copilot-otel-bridge.json` installs observers for all 14 hook events (command transport → built `dist/src/hook-egress.js`, hash content mode). `~/.copilot/settings.json` was deliberately NOT touched — the native OTel lane activates per-shell via `scripts/copilot-otel-env.{sh,ps1}` (endpoint default `http://127.0.0.1:27432`). `~/.copilot/otel_settings.jsonc` is a reference catalog only (not auto-loaded by Copilot).
+- `copilot-mcp/` — the full agentic Copilot CLI wrapped as an MCP server via `@github/copilot-sdk` 1.0.8 (SDK-spawned child over JSON-RPC; `COPILOT_MCP_CLI_URL` attaches to an external `copilot --headless`). 12 tools (`ask`, `session_create/list/events/destroy`, `models_list`, `status`, + signals). Three transports: stdio, Streamable HTTP, WebSocket — HTTP+WS share loopback port **27443** (`.env` SSoT), WS = SEP-1287-style upgrade on the same `/mcp` path via a custom Transport. MCP TS SDK **v2 stable 2.0.0** serves spec 2026-07-28 + legacy 2025-11-25 from one endpoint (Claude Code connects via legacy). Standalone JSON-RPC 2.0 typings/helpers in `src/jsonrpc/`.
+- `agent-fannypack/mcp/` — standalone `@agent-fannypack/mcp` (publish-ready, unpublished): ping (transport liveness), marco/polo (agent liveness through an injected ask path), blast-timer dead-man watchdog (`withCheckIn` makes every action call an implicit check-in; countdown zero ⇒ `onDetonate` blows the connection up to nothing).
 
-Local processes possibly still running from the verification: the bridge (node, port 14329) and the `otel-collector` container (ports 27431/27432).
+**Verified** (all against the real Copilot process, 2026-08-05): stdio/HTTP/WS each pass tools/list + ping + `ask`→"4" + marco→"polo"; watchdog detonation observed killing the HTTP server (exit 1); cross-agent `claude -p --allowedTools mcp__copilot-mcp__ask` → "Paris". `pnpm check` green in both packages (13 tests total).
+
+**Registered**: Claude Code user scope (`claude mcp list` → ✔ Connected; tools visible as `mcp__copilot-mcp__*` in new sessions) and `~/.copilot/mcp-config.json` (allowlisted: ping, marco, ask, session_list, status).
+
+**Working-tree caveat**: `copilot-otel-bridge/` modifications + new `src/conversation-projector.ts` (+test) are present but belong to a **parallel session** — preserve, don't commit/revert from this workstream. The OTel bridge from 2026-08-02 is still running (port 14329, healthy) and its ledger organically captured a real Copilot session on 2026-08-03 — hook-lane acceptance evidence for the phase-4 open item.
 
 ## Immediate next step
 
-1. **Acceptance run**: launch a real `copilot` session (trusted repo, env script dot-sourced), exercise a tool call, confirm both lanes arrive and the session appears in `/ui`.
-2. Decide merge/push of `feat/copilot-otel-bridge`.
+1. User decisions: merge/PR `feat/copilot-mcp`; publish `@agent-fannypack/mcp` or keep local.
+2. (OTel leftover) formal acceptance close-out: native-lane arrival + `/ui` render of the 2026-08-03 real session.
 
 ## Key decisions this session
 
-- Implementation home = top-level `copilot-otel-bridge/` (checksummed reference stays frozen under `docs/`).
-- TypeScript 7.0.2 (the guide's 6.0.0 pin is a phantom — never published).
-- Collector host ports 27431/27432 in `.env` (SSoT) because 4317/4318, 14317/14318, and 24317/24318 are all occupied on this machine.
-- UI is dependency-free static HTML served by the bridge itself — no separate frontend build.
-
-## Open questions for the user
-
-- Merge/push the branch?
-- Keep bridge + collector running as a resident service, or stop until the acceptance run?
+- Substrate = `@github/copilot-sdk` server-mode wrap, NOT the deprecated `gh copilot` extension the user's pasted Python reference wrapped.
+- MCP TS SDK v2 (user-confirmed "v2 beta" pre-release choice; v2 went **stable 2.0.0** mid-build and was used).
+- WS is a custom Transport (spec has no WS; SEP-1287 semantics: same endpoint, one JSON-RPC message per frame, `hasPerRequestStream` unset).
+- One shared `BlastTimer` + one `CopilotBridge` per process; expiry hooks registered once per process (stateless HTTP builds a fresh McpServer per request).
+- Default permission policy `readonly` (Copilot may read/search; write/shell rejected) — `COPILOT_MCP_PERMISSIONS=approve-all` opts out.

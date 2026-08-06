@@ -1,5 +1,23 @@
 # TASKS
 
+## Done — 2026-08-05 (copilot-mcp + @agent-fannypack/mcp)
+
+- [x] Resolve the "python at the end of the following" referent — the user's pasted Gemini convo ending in a FastMCP `server.py` wrapping the deprecated `gh copilot` extension; read/understood, rejected as substrate in favor of `@github/copilot-sdk`.
+- [x] SOTA verify (2026-08-05): MCP spec **2026-07-28 final**; TS SDK v2 **stable 2.0.0** (`@modelcontextprotocol/server|client|node`; monolithic `@modelcontextprotocol/sdk` retired); WebSocket NOT in spec (SEP-1287 open PR); `@github/copilot-sdk` 1.0.8 (`copilot --headless --port` external mode).
+- [x] Build `agent-fannypack/mcp` (`@agent-fannypack/mcp`): ping / marco→polo / blast-timer + `withCheckIn`; 8/8 node:test.
+- [x] Build `copilot-mcp/`: jsonrpc module (typings + framer/correlator/endpoint), CopilotBridge (`sendAndWait` idle-signal completion, root-agent answer filter, event sanitization, readonly permission policy), server core (12 tools), 3 transports (stdio / Streamable HTTP / WS on one port 27443), live-fire client; 5/5 tests, `pnpm check` green both packages.
+- [x] Live-fire all transports vs real Copilot: ask→"4", marco→"polo", blast arm/reset; detonation observed tearing the HTTP server down (exit 1).
+- [x] Register: `claude mcp add copilot-mcp` (user scope, Connected) + `~/.copilot/mcp-config.json` (allowlisted subset).
+- [x] Cross-agent live fire: `claude -p --allowedTools mcp__copilot-mcp__ask` → "Paris".
+- [x] Split into 7 atomic commits `3fa0f1e..db436b2` and **push** `feat/copilot-mcp`.
+
+## Open — copilot-mcp
+
+- [ ] Merge/PR decision for `feat/copilot-mcp` (pushed, no PR yet).
+- [ ] Publish decision for `@agent-fannypack/mcp` (publish-ready; unpublished; consumed via `link:` locally).
+- [ ] Production hardening if ever non-loopback: TLS/auth (`connectionToken`, bearer middleware), rate limiting.
+- [ ] Optional: WS reconnect/replay semantics (SEP-1287 is still a draft — revisit when merged into a spec revision).
+
 ## Done — 2026-08-02 (Copilot OTel bridge)
 
 - [x] Promote `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` → top-level `copilot-otel-bridge/` (frozen reference left intact, `SHA256SUMS` untouched).
@@ -14,7 +32,7 @@
 
 ## Open — Copilot OTel bridge
 
-- [ ] **Acceptance run**: real `copilot` session in a trusted repo with `scripts/copilot-otel-env.ps1` sourced — confirm native lane + hook lane both arrive, and the session renders in `/ui`.
+- [ ] **Acceptance run**: real `copilot` session in a trusted repo with `scripts/copilot-otel-env.ps1` sourced — confirm native lane + hook lane both arrive, and the session renders in `/ui`. *(2026-08-05 update: the hook lane is CONFIRMED organically — the still-running bridge's ledger captured a real Copilot session `6baa6c99…` on 2026-08-03 incl. subagents and MCP tool calls. Remaining: native-lane arrival + `/ui` render check.)*
 - [ ] Decide whether to merge `feat/copilot-otel-bridge` → `main` and/or push.
 - [ ] Production hardening items from the README checklist remain open (replace debug exporter, TLS/auth for non-loopback, retention policy, collector-side redaction).
 - [ ] Optional: containerized `hook-bridge` service in compose still defaults its OTLP endpoint to the internal `otel-collector:4318` — verified fine; host-run bridge uses 27432. Revisit if the bridge itself moves into Docker permanently.

@@ -2,6 +2,17 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-05
+
+- **A pasted reference implementation defines intent, not architecture.** The user's Python `server.py` (FastMCP wrapping `gh copilot`) named the *goal* — copilot callable by other agents over MCP — while wrapping a deprecated substrate. Extract the requirement list from such references, then re-derive the substrate from current SOTA (`@github/copilot-sdk` here) instead of porting the reference.
+- **When a requirement references a document that never arrived** ("the python at the end of the following"), exhaust local search fast (repo docs, ~/ dirs, Downloads incl. `.crdownload` partials), then ask with concrete candidate options rather than guessing — the answer here (a Gemini export) was un-findable locally by construction.
+- **Verify SDK dist-tags at build start, not research time.** The "v2 beta" plan aged out mid-task — `npm view <pkg> dist-tags` showed 2.0.0 stable had shipped between the announcement blog and implementation day. One command avoided building on a superseded beta.
+- **Read the installed `.d.ts`, not the docs, before writing against a fast-moving SDK.** Both SDKs diverged from their own documentation (`cliUrl` option doesn't exist → `RuntimeConnection.forUri`; permission kinds differ from the research doc's `approve`/`deny`). Grepping `dist/*.d.ts` after `pnpm install` is cheaper than a failed typecheck cycle.
+- **Design watchdog/liveness as three distinct layers**: transport pong (server process answers), agent round-trip (the model must respond through the real ask path), and time-window viability (dead-man timer reset by real work via a `withCheckIn` wrapper — no dedicated heartbeat traffic). Each layer catches failures the others can't.
+- **Let the dead-man switch fire once on purpose.** The organic detonation of the left-running HTTP server both proved the teardown path end-to-end and exposed a real bug (per-request expiry-hook stacking) that unit tests with a single server instance could never catch.
+- **Stateless per-request MCP handlers need process-level state discipline**: anything that must survive across requests (bridge, watchdog, session registry) lives outside the server factory and is passed in; anything registered *on* shared state (callbacks) must be registered outside the factory too.
+- **Cross-agent verification is one headless command**: `claude -p "<use the tool>" --allowedTools "mcp__<server>__<tool>"` exercises registration + spawn + full protocol + the wrapped agent in a single line — the strongest cheap acceptance test for any MCP server.
+
 ## 2026-08-02
 
 - **Offline-assembled AI deliverables carry phantom dependency pins.** A research stack validated "with stubs" can pin package versions that don't exist (here `typescript@6.0.0`). The first act after adopting such a deliverable is a real `pnpm install && pnpm check` — treat its VALIDATION.md as a claim, not evidence.
