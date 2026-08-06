@@ -10,7 +10,7 @@ corepack enable
 pnpm install --no-frozen-lockfile
 pnpm build
 pnpm hooks:generate -- --target "${TARGET_ROOT}"
-printf 'Review: %s/.github/hooks/copilot-otel-bridge.generated.json\n' "${TARGET_ROOT}"
+printf 'Review: %s/.github/hooks/copilot-otel-bridge.generated.preview\n' "${TARGET_ROOT}"
 pnpm hooks:apply -- --target "${TARGET_ROOT}"
 printf 'Installed GitHub Copilot CLI telemetry hooks into %s/.github/hooks/copilot-otel-bridge.json\n' "${TARGET_ROOT}"
 printf 'Run the stack: docker compose up --build\n'

@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -133,13 +133,16 @@ function targetPaths(scope: Scope, targetRoot: string): { generated: string; app
     const home = process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot');
     const directory = path.join(home, 'hooks');
     return {
-      generated: path.join(directory, 'copilot-otel-bridge.generated.json'),
+      // Preview must NOT end in .json: Copilot loads every *.json in the hooks
+      // dir, so a same-suffix preview alongside the applied file double-fires
+      // every hook (each event captured twice).
+      generated: path.join(directory, 'copilot-otel-bridge.generated.preview'),
       applied: path.join(directory, 'copilot-otel-bridge.json')
     };
   }
   const directory = path.join(targetRoot, '.github', 'hooks');
   return {
-    generated: path.join(directory, 'copilot-otel-bridge.generated.json'),
+    generated: path.join(directory, 'copilot-otel-bridge.generated.preview'),
     applied: path.join(directory, 'copilot-otel-bridge.json')
   };
 }
@@ -185,6 +188,10 @@ async function main(): Promise<void> {
   };
   const outputPath = apply ? paths.applied : paths.generated;
   await writeFile(outputPath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+  // Self-heal installs that predate the .preview suffix: a leftover
+  // *.generated.json in the live hooks dir double-fires every hook.
+  const legacyGenerated = path.join(path.dirname(paths.applied), 'copilot-otel-bridge.generated.json');
+  await rm(legacyGenerated, { force: true });
   process.stdout.write(`[hooks] ${apply ? 'applied' : 'generated'} ${outputPath}\n`);
   process.stdout.write(`[hooks] installed ${selectedEvents.length} observer events via ${transport}${cloud ? ' (cloud-safe subset)' : ''}\n`);
   if (!apply) process.stdout.write('[hooks] rerun with --apply after reviewing the generated file\n');
