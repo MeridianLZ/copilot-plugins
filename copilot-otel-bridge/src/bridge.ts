@@ -9,6 +9,7 @@ import { initializeTelemetry } from './otel.js';
 import { SpanAssembler } from './span-assembler.js';
 import { conversationToMarkdown, projectConversation } from './conversation-projector.js';
 import { createPayloadDeduper } from './dedupe.js';
+import { NativeSessionCache } from './native-cache.js';
 import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
 
   const telemetry = initializeTelemetry(config);
   const assembler = new SpanAssembler(telemetry.tracer, config);
+  const nativeCache = new NativeSessionCache(config.copilotHome);
   let accepted = 0;
   let duplicates = 0;
   let failed = 0;
@@ -195,7 +197,8 @@ async function main(): Promise<void> {
         const sessionId = conversationMatch ? conversationMatch[1] ?? remainder : remainder;
         const ledger = await readLedger(config.eventsFile);
         if (conversationMatch) {
-          const conversation = projectConversation(ledger, sessionId);
+          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
+          const conversation = projectConversation(ledger, sessionId, nativeEvents);
           if (conversation.event_count === 0) {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;

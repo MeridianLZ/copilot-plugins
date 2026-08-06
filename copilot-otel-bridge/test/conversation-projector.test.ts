@@ -4,6 +4,7 @@ import {
   conversationToMarkdown,
   projectConversation
 } from '../src/conversation-projector.js';
+import { parseNativeLines } from '../src/native-session.js';
 import type { CopilotHookEventName, JsonObject } from '../src/types.js';
 
 let counter = 0;
@@ -90,4 +91,40 @@ test('conversationToMarkdown is verbatim and includes nested sections', () => {
   assert.match(md, /RateLimitError|Error/);
   assert.match(md, /## Raw event ledger/);
   assert.match(md, /"hook_event_name": "sessionStart"/);
+});
+
+test('native events switch projection to native-first with hook overlay', () => {
+  const nativeLines = [
+    JSON.stringify({ type: 'session.start', data: { copilotVersion: '1.0.79-5' }, id: 'n1', timestamp: new Date(base).toISOString() }),
+    JSON.stringify({ type: 'user.message', data: { content: 'do the thing' }, id: 'n2', timestamp: new Date(base + 1_000).toISOString() }),
+    JSON.stringify({ type: 'assistant.turn_start', data: { turnId: 't-0' }, id: 'n3', timestamp: new Date(base + 1_100).toISOString() }),
+    JSON.stringify({
+      type: 'assistant.message',
+      data: { messageId: 'm-1', model: 'gpt-5.6-terra', turnId: 't-0', content: 'Done. The thing is complete.' },
+      id: 'n4',
+      timestamp: new Date(base + 5_000).toISOString()
+    }),
+    JSON.stringify({ type: 'assistant.turn_end', data: { turnId: 't-0' }, id: 'n5', timestamp: new Date(base + 8_000).toISOString() })
+  ];
+  const doc = projectConversation(envelopes(), 'sess-conv', parseNativeLines(nativeLines));
+  assert.equal(doc.schema_version, '1.1.0');
+  assert.equal(doc.source, 'native+hooks');
+  assert.equal(doc.model, 'gpt-5.6-terra');
+  assert.equal(doc.turn_count, 1);
+  const turn = doc.root.children.find((child) => child.kind === 'turn');
+  assert.ok(turn);
+  const assistantText = JSON.stringify(turn);
+  assert.ok(assistantText.includes('Done. The thing is complete.'));
+  // hook-only governance overlay landed inside the turn window
+  assert.ok(turn.children.some((child) => child.event_name === 'errorOccurred'));
+  assert.ok(turn.children.some((child) => child.event_name === 'postToolUseFailure'));
+});
+
+test('without native events the hooks-only projection is unchanged in shape', () => {
+  const doc = projectConversation(envelopes(), 'sess-conv');
+  assert.equal(doc.schema_version, '1.1.0');
+  assert.equal(doc.source, 'hooks-only');
+  assert.equal(doc.model, undefined);
+  assert.equal(doc.turn_count, 1);
+  assert.equal(doc.tool_count, 2);
 });

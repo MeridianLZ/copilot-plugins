@@ -5,6 +5,7 @@ import {
   type ProjectedStatus,
   type SessionTrace
 } from './trace-projector.js';
+import { projectNativeConversation, type NativeEvent } from './native-session.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -51,10 +52,19 @@ export interface ConversationNode {
   content: ConversationContent[];
   children: ConversationNode[];
   raw_payload?: Record<string, JsonValue>;
+  /** Model that produced this node (native lane only). */
+  model?: string;
+  /** Reasoning existed but is provider-encrypted; render a marker only. */
+  reasoning_encrypted?: boolean;
+  /** Subagent cross-link: the child's own hook-lane session_id. */
+  child_session_id?: string;
 }
 
 export interface ConversationDocument {
-  schema_version: '1.0.0';
+  schema_version: '1.1.0';
+  source: 'native+hooks' | 'hooks-only';
+  model?: string;
+  usage?: { total_nano_aiu?: number; total_premium_requests?: number; output_tokens?: number };
   session_id: string;
   generated_at: string;
   status: ProjectedStatus;
@@ -257,8 +267,70 @@ function lifecycleShell(
   };
 }
 
-export function projectConversation(envelopes: readonly HookEnvelope[], sessionId: string): ConversationDocument {
+/** Hook events worth overlaying on a native-first tree: signals the native
+ * stream does not carry (or carries less directly). */
+const OVERLAY_EVENTS = new Set<CopilotHookEventName>(['errorOccurred', 'preCompact', 'notification', 'postToolUseFailure']);
+
+function projectNativeFirst(
+  trace: SessionTrace,
+  sessionId: string,
+  nativeEvents: readonly NativeEvent[]
+): ConversationDocument {
+  const events = trace.events;
+  const spans = trace.spans;
+  const native = projectNativeConversation(nativeEvents, sessionId);
+  const root = native.root;
+
+  // Governance overlay: attach hook-only signals to the turn active at their
+  // timestamp (native turns are root children), else to the session root.
+  const turns = root.children.filter((child) => child.kind === 'turn');
+  for (const envelope of events) {
+    const name = envelope.payload.hook_event_name;
+    if (!OVERLAY_EVENTS.has(name)) continue;
+    const timeMs = eventTimeMs(envelope);
+    const host =
+      turns.find(
+        (turn) => timeMs >= turn.timestamp_ms && timeMs <= turn.timestamp_ms + (turn.duration_ms ?? Number.MAX_SAFE_INTEGER)
+      ) ?? root;
+    host.children.push(makeEventNode(envelope, host.depth + 1, name === 'errorOccurred' || name === 'postToolUseFailure' ? 'error' : undefined));
+  }
+  for (const turn of turns) turn.children.sort((left, right) => left.timestamp_ms - right.timestamp_ms);
+
+  const cwd = events.map((e) => getString(e.payload, 'cwd')).find((value) => value !== undefined);
+  const sessionSpan = spans.find((span) => span.kind === 'session');
+  const hookErrorCount = events.filter(
+    (e) => e.payload.hook_event_name === 'errorOccurred'
+  ).length;
+
+  return {
+    schema_version: '1.1.0',
+    source: 'native+hooks',
+    ...(native.model !== undefined ? { model: native.model } : {}),
+    ...(native.usage !== undefined ? { usage: native.usage } : {}),
+    session_id: sessionId,
+    generated_at: new Date().toISOString(),
+    status: root.status ?? sessionSpan?.status ?? 'open',
+    ...(cwd ? { cwd } : {}),
+    started_at_ms: native.started_at_ms ?? sessionSpan?.start_unix_ms ?? root.timestamp_ms,
+    ...(root.status === 'ok' && native.last_event_at_ms !== undefined ? { ended_at_ms: native.last_event_at_ms } : {}),
+    event_count: nativeEvents.length,
+    turn_count: native.turn_count,
+    tool_count: native.tool_count,
+    subagent_count: native.subagent_count,
+    error_count: native.error_count + hookErrorCount,
+    root,
+    events,
+    spans
+  };
+}
+
+export function projectConversation(
+  envelopes: readonly HookEnvelope[],
+  sessionId: string,
+  nativeEvents: readonly NativeEvent[] = []
+): ConversationDocument {
   const trace: SessionTrace = projectSessionTrace(envelopes, sessionId);
+  if (nativeEvents.length > 0) return projectNativeFirst(trace, sessionId, nativeEvents);
   const events = trace.events;
   const spans = trace.spans;
   const spanByStart = new Map(spans.filter((s) => s.kind !== 'point').map((s) => [s.start_event_id, s]));
@@ -430,7 +502,8 @@ export function projectConversation(envelopes: readonly HookEnvelope[], sessionI
   }
 
   return {
-    schema_version: '1.0.0',
+    schema_version: '1.1.0',
+    source: 'hooks-only',
     session_id: sessionId,
     generated_at: new Date().toISOString(),
     status: sessionSpan?.status ?? root.status ?? 'open',
@@ -506,7 +579,9 @@ function renderNodeMd(node: ConversationNode, level: number): string[] {
           ? `###`
           : `-`;
   if (heading === '-') {
-    lines.push(`${indent(level)}- **${node.title}** (${node.timestamp_iso}${status}${dur}${heuristic})`);
+    const model = node.model ? ` · ${node.model}` : '';
+    lines.push(`${indent(level)}- **${node.title}** (${node.timestamp_iso}${status}${dur}${heuristic}${model})`);
+    if (node.reasoning_encrypted) lines.push(`${indent(level + 1)}- _[reasoning encrypted]_`);
     lines.push(...renderContentMd(node.content, level + 1));
   } else {
     lines.push(`${heading} ${node.title}`);
@@ -516,6 +591,8 @@ function renderNodeMd(node: ConversationNode, level: number): string[] {
     if (node.duration_ms != null) lines.push(`- duration_ms: \`${node.duration_ms}\``);
     if (node.tool_name) lines.push(`- tool: \`${node.tool_name}\``);
     if (node.agent_name) lines.push(`- agent: \`${node.agent_name}\``);
+    if (node.model) lines.push(`- model: \`${node.model}\``);
+    if (node.child_session_id) lines.push(`- child_session: \`${node.child_session_id}\``);
     if (node.heuristic) lines.push('- correlation: `heuristic`');
     lines.push('');
     lines.push(...renderContentMd(node.content, 0));
@@ -532,6 +609,8 @@ export function conversationToMarkdown(doc: ConversationDocument): string {
     `# Conversation \`${doc.session_id}\``,
     '',
     `- generated_at: \`${doc.generated_at}\``,
+    `- source: \`${doc.source}\``,
+    ...(doc.model ? [`- model: \`${doc.model}\``] : []),
     `- status: \`${doc.status}${doc.end_reason ? ` (${doc.end_reason})` : ''}\``,
     ...(doc.cwd ? [`- cwd: \`${doc.cwd}\``] : []),
     `- started_at: \`${iso(doc.started_at_ms)}\``,
