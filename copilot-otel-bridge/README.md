@@ -623,6 +623,12 @@ OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false
 
 Enabling either lane's full-content mode can expose source code, file contents, credentials, user prompts, generated responses, and tool payloads. Collector access, disk permissions, retention, and export destinations must be treated as production security controls.
 
+## Conversation replica (native-first projection)
+
+The trace viewer's conversation feed is a **verbatim replica** built from Copilot's own per-session transcript at `$COPILOT_HOME/session-state/<session_id>/events.jsonl` (override the home with `COPILOT_HOME`). That native stream — not the hook lane — carries assistant prose, readable `reasoningText`, exact `toolCallId`/`turnId` correlation, subagent lineage, permission decisions, models, and usage. `GET /api/sessions/<id>/conversation` merges it native-first with hook events as a governance overlay and falls back to the hook-only projection when no transcript exists (smoke or remote sessions); the `source` field reports which path served the document (`native+hooks` or `hooks-only`). All native strings pass the same secret-redaction pass as the hook lane before leaving the bridge; encrypted reasoning surfaces only as a marker. The native file is read incrementally on demand (byte offset per session), so the UI's normal poll delivers new turns within a couple of seconds with no background tailers.
+
+Duplicate protection: hook events are deduplicated by payload identity (sha-256 of the stable payload JSON within `COPILOT_TRACE_DEDUPE_WINDOW_MS`, default 10 s) at both ingest and projection, because multiple installed hook files fire the same event under fresh `event_id`s. The hook generator writes review artifacts as `*.generated.preview` — never place a second `*.json` copy of the hook config in a live hooks directory.
+
 ## Console modes
 
 Set in `.env`:
