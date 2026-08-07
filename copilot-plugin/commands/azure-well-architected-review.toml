@@ -1,0 +1,2 @@
+description = "Evoke the azure-well-architected-review skill: Pillar-by-pillar Well-Architected review (Security, Reliability, Cost, Performance, Operational Excellence) of an Azure/.NET design or repo, current to 2026 platform reality (Foundry, Responses API, MAF)"
+prompt = "Use the /azure-well-architected-review skill with these arguments: {{args}}. Argument shape: <design doc or repo path> [--pillar security|reliability|cost|performance|operations]. Follow the skill's method exactly, including its blackboard/verification requirements."

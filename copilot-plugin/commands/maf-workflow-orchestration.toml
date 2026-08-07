@@ -1,0 +1,2 @@
+description = "Evoke the maf-workflow-orchestration skill: Build multi-agent workflows on Microsoft Agent Framework"
+prompt = "Use the /maf-workflow-orchestration skill with these arguments: {{args}}. Argument shape: <workflow to build> [--pattern sequential|handoff|connected-agents]. Follow the skill's method exactly, including its blackboard/verification requirements."

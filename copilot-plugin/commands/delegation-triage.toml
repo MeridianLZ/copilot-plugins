@@ -1,0 +1,2 @@
+description = "Evoke the delegation-triage skill: Choose the right executor for a subtask — a specialist subagent (csharp-azure-architect, foundry-sdk-implementer, ai-research-engineer), a peer session (chewy, buzz, goose), a skill, or inline execution"
+prompt = "Use the /delegation-triage skill with these arguments: {{args}}. Argument shape: <subtask to route>. Follow the skill's method exactly, including its blackboard/verification requirements."

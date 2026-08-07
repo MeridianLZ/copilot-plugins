@@ -1,0 +1,2 @@
+description = "Evoke the foundry-hosted-agent-scaffold skill: Scaffold a working Microsoft Foundry hosted agent"
+prompt = "Use the /foundry-hosted-agent-scaffold skill with these arguments: {{args}}. Argument shape: <agent name and purpose> [--stack dotnet|python] [--framework maf|copilot-sdk]. Follow the skill's method exactly, including its blackboard/verification requirements."

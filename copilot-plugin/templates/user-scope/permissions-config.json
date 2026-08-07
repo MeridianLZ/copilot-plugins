@@ -1,0 +1,18 @@
+{
+  "locations": {
+    "/CHANGE/ME/to/your/project/root": {
+      "tool_approvals": [
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "ask" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "session_create" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "session_list" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "session_events" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "session_destroy" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "models_list" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "status" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "ping" },
+        { "kind": "mcp", "serverName": "copilot-mcp", "toolName": "marco" }
+      ],
+      "allowed_directories": []
+    }
+  }
+}

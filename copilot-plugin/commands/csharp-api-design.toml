@@ -1,0 +1,2 @@
+description = "Evoke the csharp-api-design skill: Design or review a C#/.NET API surface — DDD boundaries, ASP.NET Core endpoint shape, versioning, nullability, money-type correctness, idempotency"
+prompt = "Use the /csharp-api-design skill with these arguments: {{args}}. Argument shape: <API area or spec to design/review> [--style minimal-api|controllers|grpc]. Follow the skill's method exactly, including its blackboard/verification requirements."

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/agent-plugins/spec/v1.0.0/plugin.schema.json",
+  "name": "copilot-home",
+  "description": "Multi-agent Copilot CLI plugin mirroring every user-configurable ~/.copilot surface: 7 role agents (orchestrator, C#/Azure architect, Foundry/copilot-sdk implementer, AI research engineer, and peer copilots Chewy/Buzz/Goose over copilot-mcp), 22 skills with slash-command evokers, dual-lane hooks, agent_blackboard shared session memory (OTel-ready), and an installer that projects repo/user-scope config.",
+  "version": "0.1.0",
+  "author": {
+    "name": "largo",
+    "email": "me@lukezautke.com",
+    "url": "https://github.com/lukezautke"
+  },
+  "homepage": "https://github.com/lukezautke/fintech-marketplace",
+  "repository": "https://github.com/lukezautke/fintech-marketplace",
+  "license": "MIT",
+  "keywords": ["multi-agent", "orchestration", "copilot-mcp", "blackboard", "otel", "foundry", "agent-memory"],
+  "category": "orchestration",
+  "tags": ["agents", "skills", "hooks", "mcp", "memory"],
+  "agents": "agents/",
+  "skills": "skills/",
+  "commands": "commands/",
+  "hooks": "hooks/copilot-hooks.json",
+  "mcpServers": ".mcp.json",
+  "lspServers": "lsp.json"
+}

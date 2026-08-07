@@ -1,0 +1,2 @@
+description = "Evoke the blackboard-sync skill: Read, append, or replay the agent_blackboard shared session memory (one append-only JSONL per session under ${COPILOT_PLUGIN_DATA}/agent_blackboard)"
+prompt = "Use the /blackboard-sync skill with these arguments: {{args}}. Argument shape: read|append|replay [<session_id>] [--event <type>] [--json '<payload>']. Follow the skill's method exactly, including its blackboard/verification requirements."

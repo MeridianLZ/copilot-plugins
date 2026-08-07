@@ -1,0 +1,2 @@
+description = "Evoke the copilot-sdk-session-wiring skill: Wire a production @github/copilot-sdk session"
+prompt = "Use the /copilot-sdk-session-wiring skill with these arguments: {{args}}. Argument shape: <integration to build> [--lang dotnet|typescript|python] [--mode spawn|headless-attach]. Follow the skill's method exactly, including its blackboard/verification requirements."

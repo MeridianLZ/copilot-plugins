@@ -1,0 +1,2 @@
+description = "Evoke the buzz-numeric-verification skill: Buzz's independent numeric verification"
+prompt = "Use the /buzz-numeric-verification skill with these arguments: {{args}}. Argument shape: <computation or claim to verify>. Follow the skill's method exactly, including its blackboard/verification requirements."

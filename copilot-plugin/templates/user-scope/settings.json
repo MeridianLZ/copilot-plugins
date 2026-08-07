@@ -1,0 +1,44 @@
+{
+  "model": "gpt-5",
+  "effortLevel": "medium",
+  "theme": "default",
+  "askUser": true,
+  "footer": {
+    "showModelEffort": true,
+    "showDirectory": true,
+    "showBranch": true,
+    "showContextWindow": true,
+    "showQuota": false,
+    "showAiUsed": false,
+    "showAgent": true,
+    "showCodeChanges": true,
+    "showUsername": false,
+    "showSandbox": true,
+    "showYolo": true,
+    "showCiStatus": false,
+    "showPullRequest": false,
+    "showCustom": false
+  },
+  "permissions": {
+    "disableBypassPermissionsMode": false
+  },
+  "sandbox": {
+    "enabled": false
+  },
+  "subagents": {
+    "maxConcurrency": 4
+  },
+  "remote": "off",
+  "keepAlive": "busy",
+  "extraKnownMarketplaces": {
+    "copilot-home-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "lukezautke/fintech-marketplace"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "copilot-home@copilot-home-marketplace": true
+  }
+}

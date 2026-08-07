@@ -1,0 +1,2 @@
+description = "Evoke the chewy-dependency-surgery skill: Chewy's dependency surgery"
+prompt = "Use the /chewy-dependency-surgery skill with these arguments: {{args}}. Argument shape: <failing install/build or conflict to untangle>. Follow the skill's method exactly, including its blackboard/verification requirements."

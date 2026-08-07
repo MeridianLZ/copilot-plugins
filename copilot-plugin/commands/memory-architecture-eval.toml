@@ -1,0 +1,2 @@
+description = "Evoke the memory-architecture-eval skill: Evaluate or choose an agent memory architecture for a workload"
+prompt = "Use the /memory-architecture-eval skill with these arguments: {{args}}. Argument shape: <workload or memory design to evaluate>. Follow the skill's method exactly, including its blackboard/verification requirements."
