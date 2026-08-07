@@ -12,6 +12,8 @@ export interface CopilotMcpConfig {
   /** Attach to an external `copilot --headless` server instead of spawning. */
   cliUrl: string | undefined;
   askTimeoutMs: number;
+  /** Root dir of copilot-home agent definitions (persona markdown per agent). */
+  personaDir: string;
 }
 
 function packageRoot(): string {
@@ -48,5 +50,8 @@ export function loadConfig(): CopilotMcpConfig {
     model: process.env['COPILOT_MCP_MODEL'] || undefined,
     cliUrl: process.env['COPILOT_MCP_CLI_URL'] || undefined,
     askTimeoutMs: Number(process.env['COPILOT_MCP_ASK_TIMEOUT_MS'] ?? 300_000),
+    personaDir:
+      process.env['COPILOT_MCP_PERSONA_DIR'] ??
+      '/Volumes/MACDEV/fable-medium_copilot_plugin/copilot-plugin/agents',
   };
 }

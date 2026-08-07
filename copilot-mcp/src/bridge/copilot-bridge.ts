@@ -7,6 +7,16 @@ import {
 } from '@github/copilot-sdk';
 import type { CopilotMcpConfig } from '../config.js';
 
+/** Peer persona pinned to a session via SDK customAgents + agent select-at-create. */
+export interface SessionPersona {
+  name: string;
+  displayName?: string;
+  description?: string;
+  /** The persona instructions (CustomAgentConfig.prompt). */
+  prompt: string;
+  model?: string;
+}
+
 export interface AskResult {
   answer: string;
   session_id: string;
@@ -78,11 +88,40 @@ export class CopilotBridge {
         : { kind: 'reject' };
   }
 
-  async createSession(model?: string): Promise<SessionInfo> {
+  async createSession(
+    opts: { model?: string; systemMessage?: string; persona?: SessionPersona } = {},
+  ): Promise<SessionInfo> {
     const client = await this.client();
-    const chosenModel = model ?? this.config.model;
+    const chosenModel = opts.model ?? opts.persona?.model ?? this.config.model;
     const session = await client.createSession({
       ...(chosenModel !== undefined ? { model: chosenModel } : {}),
+      ...(opts.systemMessage !== undefined
+        ? { systemMessage: { mode: 'append' as const, content: opts.systemMessage } }
+        : {}),
+      // Persona = single custom agent pinned from the first prompt (`agent`
+      // select-at-create beats a post-create select() racing the first send).
+      // infer:false so the runtime never auto-delegates away from the pin.
+      // NOTE: systemMessage {mode:'replace'} is deliberately never used — the
+      // SDK documents it as removing all guardrails incl. security restrictions.
+      ...(opts.persona !== undefined
+        ? {
+            customAgents: [
+              {
+                name: opts.persona.name,
+                ...(opts.persona.displayName !== undefined
+                  ? { displayName: opts.persona.displayName }
+                  : {}),
+                ...(opts.persona.description !== undefined
+                  ? { description: opts.persona.description }
+                  : {}),
+                prompt: opts.persona.prompt,
+                ...(chosenModel !== undefined ? { model: chosenModel } : {}),
+                infer: false,
+              },
+            ],
+            agent: opts.persona.name,
+          }
+        : {}),
       onPermissionRequest: this.#permissionHandler(),
     });
     return this.#track(session, chosenModel);
@@ -119,13 +158,16 @@ export class CopilotBridge {
     };
   }
 
-  async #resolve(sessionId: string | undefined, model?: string): Promise<TrackedSession> {
+  async #resolve(
+    sessionId: string | undefined,
+    opts: { model?: string; systemMessage?: string; persona?: SessionPersona } = {},
+  ): Promise<TrackedSession> {
     if (sessionId !== undefined) {
       const tracked = this.#sessions.get(sessionId);
       if (!tracked) throw new Error(`unknown session_id: ${sessionId}`);
       return tracked;
     }
-    const info = await this.createSession(model);
+    const info = await this.createSession(opts);
     const tracked = this.#sessions.get(info.session_id);
     if (!tracked) throw new Error('session vanished during creation');
     return tracked;
@@ -141,8 +183,16 @@ export class CopilotBridge {
     session_id?: string;
     model?: string;
     timeout_ms?: number;
+    /** Cross-cutting instructions appended when this ask creates the session. */
+    systemMessage?: string;
+    /** Peer persona pinned when this ask creates the session. */
+    persona?: SessionPersona;
   }): Promise<AskResult> {
-    const tracked = await this.#resolve(opts.session_id, opts.model);
+    const tracked = await this.#resolve(opts.session_id, {
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      ...(opts.systemMessage !== undefined ? { systemMessage: opts.systemMessage } : {}),
+      ...(opts.persona !== undefined ? { persona: opts.persona } : {}),
+    });
     const timeout = opts.timeout_ms ?? this.config.askTimeoutMs;
     const started = Date.now();
     const eventsBefore = tracked.events.length;

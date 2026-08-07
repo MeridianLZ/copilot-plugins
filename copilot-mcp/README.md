@@ -12,6 +12,7 @@ The **full GitHub Copilot CLI agentic process wrapped as an MCP server**, so oth
 | Tool | Purpose |
 |---|---|
 | `ask` | **The headline tool.** Prompt → completed Copilot turn (idle-signal semantics, timeout-guarded). `session_id` continues a conversation. |
+| `chewy` / `buzz` / `goose` | Peer-copilot persona tools: same contract as `ask`, but the session pins a single SDK custom agent (`customAgents` + `agent` select-at-create, `infer:false`) fused from the copilot-home agent markdown (`COPILOT_MCP_PERSONA_DIR`), with the persona's `.agent.md`-pinned model. |
 | `session_create` / `session_list` / `session_destroy` | Persistent multi-turn session lifecycle |
 | `session_events` | Recent sanitized lifecycle/tool events (reasoning withheld, verbose tool output dropped) |
 | `models_list` | Models available to the wrapped CLI |
@@ -48,7 +49,7 @@ pnpm live-fire -t all -a -s -b
 
 Verified 2026-08-05 on this machine, all against the live Copilot process:
 
-- **stdio / HTTP / WS**: tools/list (12 tools), `ping` → pong, `ask("What is 2+2?")` → `"4"` (~7s), `marco` → `"polo"` through a real Copilot session (7–12s RTT), blast timer arm → check-in reset → status.
+- **stdio / HTTP / WS**: tools/list (15 tools), `ping` → pong, `ask("What is 2+2?")` → `"4"` (~7s), `marco` → `"polo"` through a real Copilot session (7–12s RTT), blast timer arm → check-in reset → status.
 - **Detonation**: with the watchdog armed and no check-ins, the HTTP server tore down all WS clients, destroyed every session, stopped the CLI child, and exited non-zero at countdown zero.
 - **Cross-agent**: `claude -p "…" --allowedTools "mcp__copilot-mcp__ask"` → wrapped Copilot answered through the chain Claude Code → MCP → copilot-mcp → Copilot SDK → CLI process.
 

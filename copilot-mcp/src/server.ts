@@ -8,6 +8,8 @@ import {
   withCheckIn,
 } from '@agent-fannypack/mcp';
 import type { CopilotBridge } from './bridge/copilot-bridge.js';
+import { loadConfig } from './config.js';
+import { loadPersonas, type Persona } from './personas.js';
 
 export const SERVER_NAME = 'copilot-mcp';
 export const SERVER_VERSION = '0.1.0';
@@ -21,6 +23,8 @@ export interface BuildServerOptions {
   timer?: BlastTimer;
   /** What "blown up to nothing" means for the hosting transport. */
   onDetonate?: () => void | Promise<void>;
+  /** Persona tools to expose (default: loaded from config personaDir). */
+  personas?: Persona[];
 }
 
 const sessionInfoSchema = z.object({
@@ -100,7 +104,7 @@ export function buildServer(opts: BuildServerOptions): McpServer {
       outputSchema: sessionInfoSchema,
     },
     withCheckIn(timer, async ({ model }: { model?: string }) => {
-      const info = await bridge.createSession(model);
+      const info = await bridge.createSession({ ...(model !== undefined ? { model } : {}) });
       const { model: m, ...rest } = info;
       return textResult({ ...rest, ...(m !== undefined ? { model: m } : {}) });
     }),
@@ -189,6 +193,53 @@ export function buildServer(opts: BuildServerOptions): McpServer {
     },
     withCheckIn(timer, async () => textResult(await bridge.status())),
   );
+
+  // --- Peer persona tools (chewy / buzz / goose) -------------------------
+  // Each tool is a first-class peer copilot: same contract as `ask`, but the
+  // session pins a single SDK custom agent (agent select-at-create, infer:false)
+  // built from the persona's fused markdown and its .agent.md-pinned model.
+  // session_id persists the peer's context.
+  const personas = opts.personas ?? loadPersonas(loadConfig().personaDir);
+  for (const persona of personas) {
+    server.registerTool(
+      persona.name,
+      {
+        title: `Ask peer copilot ${persona.name}`,
+        description: persona.description,
+        inputSchema: z.object({
+          prompt: z.string().describe(`The question/task for ${persona.name}`),
+          session_id: z.string().optional().describe('Continue this peer\'s existing session'),
+          timeout_ms: z.number().positive().optional().describe('Turn timeout override'),
+        }),
+        outputSchema: z.object({
+          answer: z.string(),
+          session_id: z.string(),
+          turn_ms: z.number(),
+          model: z.string().optional(),
+          tool_calls: z.array(
+            z.object({ tool: z.string(), status: z.enum(['complete', 'failed']) }),
+          ),
+        }),
+      },
+      withCheckIn(
+        timer,
+        async (args: { prompt: string; session_id?: string; timeout_ms?: number }) => {
+          const result = await bridge.ask({
+            ...args,
+            persona: {
+              name: persona.name,
+              displayName: persona.name.charAt(0).toUpperCase() + persona.name.slice(1),
+              description: persona.description,
+              prompt: persona.systemMessage,
+              ...(persona.model !== undefined ? { model: persona.model } : {}),
+            },
+          });
+          const { model, ...rest } = result;
+          return textResult({ ...rest, ...(model !== undefined ? { model } : {}) });
+        },
+      ),
+    );
+  }
 
   return server;
 }
