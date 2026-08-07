@@ -1,5 +1,17 @@
 # TASKS
 
+## Done — 2026-08-07 (copilot-home plugin + persona MCP tools, merged to main `d94ec4c`)
+
+- [x] Worktree `fable-medium_copilot_plugin`; research team (5 Explore agents) on Copilot CLI 1.0.78 plugin/agent/skill/hook/instruction/MCP schemas + Foundry/copilot-sdk/memory SOTA (reports in scratchpad, digests survive in kb-worthy detail in session).
+- [x] `copilot-plugin/`: 7 agents x [agent.md + system-prompt + specialized_role + mission], 22 skills, 22 TOML evokers, dual-lane hooks + blackboard scripts (live-fired), `.mcp.json` (copilot-mcp 12 tools), `.github` projection payload, user-scope templates + installer skill, injection-and-projection doc, marketplace manifest (`040ea92`).
+- [x] copilot-mcp persona tools Chewy/Buzz/Goose via SDK customAgents+agent pin (`07c2aeb`); identity preamble fix (`d2c1fa1`); prose capitalization (`c9cfb48`/`b6022a4`); registered user-scope in Claude Code.
+- [x] Deep live probes: 6x3 matrix + four-way 6-round debate + edges (unknown session, empty prompt, ring cap 500, timeout, destroy) + blackboard audit 0 malformed.
+
+## Open — 2026-08-07
+
+- [ ] Locate four-way conversation in OTel traces; open trace-UI replica displaying it (in flight).
+- [ ] Optional: live-install copilot-home into Copilot CLI; phase-2 OTel exporter tailing blackboard JSONL; fix `tool_calls` `tool:"unknown"` summaries in copilot-mcp.
+
 ## Done — 2026-08-06 late (conversation replica, branch `feat/copilot-otel-replica`, pushed)
 
 - [x] Investigate trace UI shortfall: click-through 6 rich sessions + live copilot-mcp session; root-caused all missing spans (double hook install ×2 events; hash content; hook lane lacks assistant prose; native session-state transcript unread; UI raw-JSON fallthrough).
