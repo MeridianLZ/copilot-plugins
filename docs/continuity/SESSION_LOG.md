@@ -2,6 +2,14 @@
 
 _Newest first._
 
+## 2026-08-07 - copilot-home plugin, persona MCP tools, all merged to main
+
+- **Request**: worktree `fable-medium_copilot_plugin`; Copilot plugin mirroring ~/.copilot user-configurable surfaces + plugin-root .github; inject/project doc; 7 full-frontmatter agents (orchestrator, C#/Azure architect, Foundry/copilot-sdk implementer, AI-research-engineer, peers Chewy/Buzz/Goose) x3 skills + slash evokers + fused asset docs + tool_allowed vs root .mcp.json. Then: expose the three peers as MCP tools, register, restart, deep live probe. Then: name-UX fix, capitalization, merges, continuity, OTel UI replay.
+- **Research** (3 subagents + 2 more later, all reports in session scratchpad): Copilot CLI 1.0.78 SOTA — plugin manifest search order incl. `plugin.json`; plugins DO carry agents/skills/commands/hooks/.mcp.json; #2540 root cause = hook cwd resolves to project, workaround `"cwd":"${PLUGIN_ROOT}"`; full .agent.md + SKILL.md frontmatter schemas; Microsoft Foundry/MAF/copilot-sdk GA surfaces; contested memory-SOTA (Letta filesystem 74.0 > Mem0 graph 68.5 on LOCOMO).
+- **Built**: `copilot-plugin/` (94 files, commit `040ea92` worktree) + persona tools in `copilot-mcp` (`07c2aeb`), identity preamble (`d2c1fa1`), capitalization (`c9cfb48` main-repo, `b6022a4` worktree). Merges to main: `cfdb37f`, `8786d33`, `852356f`, `d94ec4c` — main now carries plugin + persona tools.
+- **Verified live**: hooks live-fire (guard denies force-push/kubectl, blackboard JSONL w/ stable md5 trace_id); persona probe 6x3 matrix all pass; four-way 6-round debate — by-name rebuttals, accurate cross-memory (Chewy summarized Buzz; Buzz verified Goose's claim; Goose compiled correct comms-log), peers unanimously NO-GO on replacing their own blackboard with a temporal KG; readonly enforced (no file created); `claude mcp add copilot-mcp` user-scope ✔ Connected.
+
+
 ## 2026-08-06 (latest) - hook-telemetry FAQ, container replica mount, PR #1
 
 - **Request**: answer (md + KB): value of custom hook telemetry; hook inputs/memory/context; harness state beyond exit code; exit-code-1 uses; UI dockerized?; can primary agent set copilot model/context/effort — then PR + continuity.

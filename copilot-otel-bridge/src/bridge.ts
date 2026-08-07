@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.js';
@@ -19,6 +19,44 @@ function uiIndexPath(): string {
     ? path.resolve(moduleDir, '../..')
     : path.resolve(moduleDir, '..');
   return path.join(root, 'ui', 'index.html');
+}
+
+/**
+ * Native session-state listing: sessions whose transcript exists under
+ * `$COPILOT_HOME/session-state/<id>/events.jsonl` but never reached the hook
+ * ledger (bridge down, hooks not installed, SDK-spawned CLI). The conversation
+ * route already projects these native-first; this makes them discoverable in
+ * the sidebar. Ledger summaries win on id collision (richer counts).
+ */
+async function listNativeSessions(copilotHome: string): Promise<Array<Record<string, unknown>>> {
+  const stateDir = path.join(copilotHome, 'session-state');
+  let ids: string[];
+  try {
+    ids = await readdir(stateDir);
+  } catch {
+    return [];
+  }
+  const sessions: Array<Record<string, unknown>> = [];
+  for (const id of ids) {
+    try {
+      const s = await stat(path.join(stateDir, id, 'events.jsonl'));
+      sessions.push({
+        session_id: id,
+        started_at_ms: s.birthtimeMs || s.mtimeMs,
+        last_event_at_ms: s.mtimeMs,
+        status: 'closed',
+        event_count: 0,
+        turn_count: 0,
+        tool_count: 0,
+        subagent_count: 0,
+        error_count: 0,
+        source: 'native'
+      });
+    } catch {
+      // no transcript — not a projectable session
+    }
+  }
+  return sessions;
 }
 
 async function readLedger(eventsFile: string): Promise<HookEnvelope[]> {
@@ -187,7 +225,17 @@ async function main(): Promise<void> {
       }
       if (request.method === 'GET' && url.pathname === '/api/sessions') {
         await ingestTail;
-        sendJson(response, 200, { sessions: projectSessions(await readLedger(config.eventsFile)) });
+        const ledgerSessions = projectSessions(await readLedger(config.eventsFile));
+        const known = new Set(ledgerSessions.map((s) => s.session_id));
+        const nativeSessions = (await listNativeSessions(config.copilotHome)).filter(
+          (s) => !known.has(s['session_id'] as string)
+        );
+        const merged = [...ledgerSessions, ...nativeSessions].sort(
+          (a, b) =>
+            ((b as Record<string, unknown>)['last_event_at_ms'] as number) -
+            ((a as Record<string, unknown>)['last_event_at_ms'] as number)
+        );
+        sendJson(response, 200, { sessions: merged });
         return;
       }
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
