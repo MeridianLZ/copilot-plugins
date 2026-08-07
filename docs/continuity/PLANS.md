@@ -19,6 +19,8 @@ A Claude Code plugin marketplace (`fintech-frontend`, `fintech-backend`) for ent
 
 ## Current facts (as of 2026-08-06 late, replica scope)
 
+- **PR #1 open**: `feat/copilot-otel-replica` → `main` (carries copilot-mcp + level-up + replica). FAQ answering hook-telemetry questions at `copilot-otel-bridge/docs/HOOK_TELEMETRY_FAQ.md` (commit `701ea3e`) + KB note `projects/fintech-marketplace/copilot-otel-bridge/copilot-cli-hook-telemetry-faq-2026-08-06`; compose `hook-bridge` now mounts host `~/.copilot` ro (`COPILOT_HOME=/copilot-home`) so the containerized UI serves the replica.
+
 - Branch `feat/copilot-otel-replica` pushed: `ed40729` (hook preview fix) → `66f67cf` (dedupe) → `0b96ba2` (native projector+cache) → `221f62d` (turn semantics) → `1129f1f` (UI renderer) → `2d492a7` (md fence fix) → `c6fdebb` (docs). Prior level-up was already committed by the parallel session as `59f6eb8` on `feat/copilot-mcp`.
 - Test gate now **34/34** (`pnpm check`); conversation schema `1.1.0` with `source: native+hooks | hooks-only`.
 - `~/.copilot/hooks/` now holds exactly ONE bridge config; the historical 2× ledger self-repairs at projection time.

@@ -2,6 +2,13 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-06 latest (hook mechanics + SDK control surface)
+
+- **Fact:** Copilot CLI hooks have NO feedback channel to the harness except the exit code; only `preToolUse` reacts (non-zero = deny). No structured decision JSON, no arg rewriting, no context/model mutation from hooks.
+- **Fact:** hooks receive stdin JSON (+ baked env + inherited env) and run as the user — `transcriptPath` in agentStop/subagentStart/preCompact payloads gives any hook read access to the full verbatim conversation (`session-state/<id>/`).
+- **Fact (SDK 1.0.8):** session control surface = `model`, `reasoningEffort` (gated on `capabilities.supports.reasoningEffort`), `workingDirectory`, `systemMessage` (append/replace), `MemoryConfiguration`, tools/MCP servers; mid-session `session.setModel(id, {reasoningEffort})`. copilot-mcp exposes only `model` — gap filed.
+- **Invariant:** containerized bridge needs the ro `~/.copilot` mount (`COPILOT_HOME=/copilot-home`, host override `COPILOT_HOME_HOST`) or the replica silently degrades to hooks-only.
+
 ## 2026-08-06 late (conversation replica)
 
 - **Correction:** test count gate is now **34** node:test cases (`pnpm check`), superseding the 18 noted earlier on 2026-08-06.

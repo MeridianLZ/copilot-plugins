@@ -2,6 +2,12 @@
 
 _Newest first._
 
+## 2026-08-06 (latest) - hook-telemetry FAQ, container replica mount, PR #1
+
+- **Request**: answer (md + KB): value of custom hook telemetry; hook inputs/memory/context; harness state beyond exit code; exit-code-1 uses; UI dockerized?; can primary agent set copilot model/context/effort — then PR + continuity.
+- **Answers** in `copilot-otel-bridge/docs/HOOK_TELEMETRY_FAQ.md` (`701ea3e`) + KB `copilot-cli-hook-telemetry-faq-2026-08-06`. Headlines: hooks = push/remote/deny-capable governance lane vs native transcript = verbatim authority; hooks get stdin JSON + env + full user FS (incl. `transcriptPath` → whole conversation); NO harness feedback beyond exit code; preToolUse exit≠0 denies (guard-core pattern), other events unaffected; UI is dockerized (`hook-bridge` service) and now replica-capable via ro `~/.copilot` mount (`COPILOT_HOME`); SDK fully supports model + reasoningEffort (capability-gated) + context (workingDirectory/systemMessage/memory/tools/MCP) incl. mid-session `setModel` — copilot-mcp only plumbs `model` (follow-up filed).
+- **PR #1** opened: `feat/copilot-otel-replica` → `main`.
+
 ## 2026-08-06 (late) - trace UI taken over → full conversation replica shipped
 
 - **Request**: take over the trace UI (another agent's work, "falling VERY short"); browse 6-10 rich sessions with screenshots, live-fire a copilot-mcp session watching real-time arrival, chase every missing span to its root, then plan + implement to deployable.

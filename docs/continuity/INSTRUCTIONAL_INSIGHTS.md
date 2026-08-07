@@ -2,6 +2,11 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-06 latest (FAQ pass)
+
+- **Answer capability questions from the installed `.d.ts` and a live probe, not docs or memory.** "Can the primary agent set effort?" resolved in one grep of `SessionConfigBase`/`session.setModel` — including the capability gate (`supports.reasoningEffort`) that docs elide.
+- **When documenting a two-lane system, lead with the question each lane answers** (control vs truth), not their mechanisms — that's what makes "why keep the hook lane?" self-evident.
+
 ## 2026-08-06 late (replica takeover)
 
 - **When a rendering looks doubled, check the capture layer before the renderer.** Every span appearing exactly twice (one clean, one "recovered 0 ms" ghost) was two hook files firing — visible in 60 seconds by grouping ledger lines on `(session, event, timestamp)`. Smoke sessions (which bypass hooks) rendering singly was the decisive control.

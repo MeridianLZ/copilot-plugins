@@ -16,10 +16,12 @@ _Last updated: 2026-08-06 late (scope: trace-UI conversation replica; supersedes
 
 Bridge on **:14329** restarted with new dist and healthy. Test sessions disconnected.
 
+**PR #1 is open** (`feat/copilot-otel-replica` → `main`, includes copilot-mcp + level-up + replica + hook-telemetry FAQ `701ea3e` + compose COPILOT_HOME mount). KB note written to master-kb.
+
 ## Immediate next step
 
-1. Merge/PR decisions: `feat/copilot-otel-replica` (contains everything), plus older `feat/copilot-mcp`, `feat/copilot-otel-bridge`.
-2. Optional follow-ups: copilot-mcp `tool_calls` reports `tool:"unknown"` (its own summary bug, separate workstream); native-lane OTel content capture flip (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`) if span-attribute content is ever wanted; multi-epoch session resume modeling.
+1. Merge decision for PR #1 (user).
+2. Optional follow-ups: copilot-mcp — expose `reasoning_effort`/`working_directory`/`system_message` (SDK supports; only `model` plumbed) and fix `tool_calls` `tool:"unknown"` summaries; native-lane OTel content flip if wanted; multi-epoch resume modeling.
 
 ## Key decisions (2026-08-06 late)
 

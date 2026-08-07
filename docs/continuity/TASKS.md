@@ -9,9 +9,16 @@
 - [x] UI replica renderer: md bubbles, model chips, reasoning, tool cards, nested subagents + child links, permission rows, usage footer, waterfall fix (`1129f1f`, `2d492a7`).
 - [x] Tests 18 → **34**; docs (`c6fdebb`); live-fire acceptance: 6baa replica render + fresh session verbatim ~2-4 s.
 
+## Done — 2026-08-06 (hook-telemetry FAQ + PR)
+
+- [x] `docs/HOOK_TELEMETRY_FAQ.md` + KB note: hook-lane value vs native transcript, hook inputs/context (stdin JSON + env + transcriptPath), no harness state beyond exit code, preToolUse exit≠0 = deny, containerized UI, SDK model/effort/context control surface (`701ea3e`).
+- [x] compose: mount host `~/.copilot` ro + `COPILOT_HOME` so containerized replica works.
+- [x] **PR #1** opened: `feat/copilot-otel-replica` → `main`.
+
 ## Open — conversation replica
 
-- [ ] Merge/PR decision for `feat/copilot-otel-replica`.
+- [ ] Merge decision for PR #1.
+- [ ] copilot-mcp: expose `reasoning_effort` / `working_directory` / `system_message` on ask/session_create (SDK supports; wrapper only plumbs `model`).
 - [ ] copilot-mcp workstream: `ask` tool_calls report `tool:"unknown"` — fix its event-summary parsing.
 - [ ] Optional: flip `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in env scripts if span-attribute content wanted in the OTel lane.
 - [ ] Optional: model multi-epoch resumed sessions (session.resume) instead of one continuous wall-clock span.
