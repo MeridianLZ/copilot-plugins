@@ -1,0 +1,2 @@
+description = "Evoke the aspire-foundry-deployment skill: Design the deployment topology for agent workloads on .NET Aspire and Microsoft Foundry — prompt vs hosted agents, container shape, Entra identities, scale-to-zero, BYO VNet/Cosmos/Search, OTel wiring to Application Insights"
+prompt = "Use the /aspire-foundry-deployment skill with these arguments: {{args}}. Argument shape: <agent workload to host> [--constraint vnet|compliance|cost]. Follow the skill's method exactly, including its blackboard/verification requirements."

@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "copilot-mcp": {
+      "type": "local",
+      "command": "node",
+      "args": ["/Volumes/MACDEV/fintech-marketplace/copilot-mcp/dist/transports/stdio.js"],
+      "env": {
+        "COPILOT_MCP_PERMISSIONS": "readonly",
+        "COPILOT_MCP_ASK_TIMEOUT_MS": "300000"
+      },
+      "tools": [
+        "ask",
+        "session_create",
+        "session_list",
+        "session_events",
+        "session_destroy",
+        "models_list",
+        "status",
+        "ping",
+        "marco",
+        "blast_timer_start",
+        "check_in",
+        "blast_timer_status"
+      ]
+    }
+  }
+}

@@ -1,0 +1,2 @@
+description = "Evoke the goose-radar-sweep skill: Goose's radar sweep"
+prompt = "Use the /goose-radar-sweep skill with these arguments: {{args}}. Argument shape: <area/topic to sweep> [--box <path>] [--depth shallow|standard]. Follow the skill's method exactly, including its blackboard/verification requirements."

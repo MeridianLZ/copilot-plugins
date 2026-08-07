@@ -1,0 +1,2 @@
+description = "Evoke the goose-comms-log skill: Goose's comms log"
+prompt = "Use the /goose-comms-log skill with these arguments: {{args}}. Argument shape: [<session_id>] [--since <ts>] [--for-agent <name>]. Follow the skill's method exactly, including its blackboard/verification requirements."

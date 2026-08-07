@@ -1,0 +1,2 @@
+description = "Evoke the chewy-risk-gutcheck skill: Chewy's blunt pre-flight risk gut-check on a proposed change"
+prompt = "Use the /chewy-risk-gutcheck skill with these arguments: {{args}}. Argument shape: <change/diff/plan to gut-check>. Follow the skill's method exactly, including its blackboard/verification requirements."

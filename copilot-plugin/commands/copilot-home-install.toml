@@ -1,0 +1,2 @@
+description = "Evoke the copilot-home-install skill: Install/project copilot-home surfaces beyond what the plugin manifest loads natively"
+prompt = "Use the /copilot-home-install skill with these arguments: {{args}}. Argument shape: repo|user|all [--target <repo-path>] [--dry-run]. Follow the skill's method exactly, including its blackboard/verification requirements."

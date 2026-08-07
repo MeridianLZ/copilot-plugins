@@ -1,0 +1,2 @@
+description = "Evoke the buzz-telemetry-analysis skill: Buzz's telemetry analysis"
+prompt = "Use the /buzz-telemetry-analysis skill with these arguments: {{args}}. Argument shape: <anomaly or stream to analyze> [--trace <trace_id>] [--session <session_id>]. Follow the skill's method exactly, including its blackboard/verification requirements."
