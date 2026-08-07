@@ -1,0 +1,2 @@
+description = "Evoke the goose-preflight-checklist skill: Goose's preflight checklist"
+prompt = "Use the /goose-preflight-checklist skill with these arguments: {{args}}. Argument shape: <maneuver to preflight: merge|deploy|config> [<target>]. Follow the skill's method exactly, including its blackboard/verification requirements."

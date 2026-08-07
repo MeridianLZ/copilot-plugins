@@ -1,0 +1,2 @@
+description = "Evoke the agentic-memory-benchmark skill: Design an honest benchmark for an agent memory system"
+prompt = "Use the /agentic-memory-benchmark skill with these arguments: {{args}}. Argument shape: <memory system or claim to benchmark>. Follow the skill's method exactly, including its blackboard/verification requirements."

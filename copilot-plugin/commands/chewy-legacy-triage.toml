@@ -1,0 +1,2 @@
+description = "Evoke the chewy-legacy-triage skill: Chewy's legacy triage"
+prompt = "Use the /chewy-legacy-triage skill with these arguments: {{args}}. Argument shape: <legacy area to stabilize>. Follow the skill's method exactly, including its blackboard/verification requirements."

@@ -1,0 +1,2 @@
+description = "Evoke the context-compaction-audit skill: Audit a session or agent system's context economics"
+prompt = "Use the /context-compaction-audit skill with these arguments: {{args}}. Argument shape: <session/system to audit> [--budget <tokens>]. Follow the skill's method exactly, including its blackboard/verification requirements."

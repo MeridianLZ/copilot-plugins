@@ -1,0 +1,33 @@
+{
+  "name": "copilot-home-marketplace",
+  "owner": {
+    "name": "largo",
+    "email": "me@lukezautke.com"
+  },
+  "metadata": {
+    "description": "Marketplace for the copilot-home multi-agent Copilot CLI plugin.",
+    "version": "0.1.0",
+    "pluginRoot": "./"
+  },
+  "plugins": [
+    {
+      "name": "copilot-home",
+      "source": "./copilot-plugin",
+      "description": "Multi-agent Copilot CLI plugin: orchestrator + specialists + peer council (chewy/buzz/goose over copilot-mcp), 22 skills with slash evokers, agent_blackboard shared session memory (OTel-ready), dual-lane hooks, ~/.copilot mirror templates with installer.",
+      "version": "0.1.0",
+      "author": { "name": "largo", "url": "https://github.com/lukezautke" },
+      "homepage": "https://github.com/lukezautke/fintech-marketplace",
+      "repository": "https://github.com/lukezautke/fintech-marketplace",
+      "license": "MIT",
+      "keywords": ["multi-agent", "orchestration", "copilot-mcp", "blackboard", "otel"],
+      "category": "orchestration",
+      "tags": ["agents", "skills", "hooks", "mcp", "memory"],
+      "agents": "agents/",
+      "skills": "skills/",
+      "commands": "commands/",
+      "hooks": "hooks/copilot-hooks.json",
+      "mcpServers": ".mcp.json",
+      "strict": false
+    }
+  ]
+}

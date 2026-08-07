@@ -1,0 +1,2 @@
+description = "Evoke the buzz-docking-contract skill: Buzz's docking contract"
+prompt = "Use the /buzz-docking-contract skill with these arguments: {{args}}. Argument shape: <system A> <system B> [--protocol mcp|hook|http|jsonrpc]. Follow the skill's method exactly, including its blackboard/verification requirements."
