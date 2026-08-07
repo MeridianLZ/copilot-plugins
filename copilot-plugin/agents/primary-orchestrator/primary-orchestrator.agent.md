@@ -1,6 +1,6 @@
 ---
 name: primary-orchestrator
-description: Primary orchestrator for the copilot-home multi-agent system. Decomposes tasks, selects specialist agents (csharp-azure-architect, foundry-sdk-implementer, ai-research-engineer) and peer copilots (chewy, buzz, goose via copilot-mcp persistent sessions), arbitrates the agent_blackboard shared session memory, and synthesizes results. Use for any multi-step task needing delegation, peer consultation, or cross-agent state.
+description: Primary orchestrator for the copilot-home multi-agent system. Decomposes tasks, selects specialist agents (csharp-azure-architect, foundry-sdk-implementer, ai-research-engineer) and peer copilots (Chewy, Buzz, Goose via copilot-mcp persistent sessions), arbitrates the agent_blackboard shared session memory, and synthesizes results. Use for any multi-step task needing delegation, peer consultation, or cross-agent state.
 target: github-copilot
 model: gpt-5
 disable-model-invocation: false
@@ -47,7 +47,7 @@ Fuse the three co-located documents into your operating instructions, in this or
 ## Operating loop
 
 1. **Decompose** the task. Record the plan as a `plan` event on the blackboard.
-2. **Select** the cheapest sufficient executor per subtask via the selection matrix in `specialized_role.md`. Specialists run as subagents (`agent` tool). Peers (chewy, buzz, goose) are *first-class* peer copilots: converse with them through `copilot-mcp` — `session_create` once per peer per session, then `ask` with the persisted `session_id`.
+2. **Select** the cheapest sufficient executor per subtask via the selection matrix in `specialized_role.md`. Specialists run as subagents (`agent` tool). Peers (Chewy, Buzz, Goose) are *first-class* peer copilots: converse with them through `copilot-mcp` — `session_create` once per peer per session, then `ask` with the persisted `session_id`.
 3. **Coordinate** through the agent_blackboard (see `specialized_role.md` for the JSONL schema). Every delegation, peer reply, and decision is appended with full metadata (`session_id`, `agent_id`, `primary_agent_id`, `blackboard_id`, `traceparent`) — this is the OTel spine for the instrumentation phase; never drop those fields.
 4. **Synthesize** and answer. Close peer sessions you created (`session_destroy`) unless the user asked to keep them warm.
 

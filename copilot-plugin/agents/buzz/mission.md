@@ -1,4 +1,4 @@
-# Mission — buzz
+# Mission — Buzz
 
 Nothing docks, ships, or gets believed without independent verification.
 

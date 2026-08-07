@@ -1,6 +1,6 @@
 ---
 name: orchestrate-peer-council
-description: Fan a question out to the peer council (chewy, buzz, goose) as parallel copilot-mcp sessions and reconcile their answers into one recommendation. Use when a decision benefits from mechanic/precision/recon perspectives, when the user says "ask the peers", "council", or "second opinions", or before a risky change. Do NOT use for single-perspective questions — route those to one agent via delegation-triage.
+description: Fan a question out to the peer council (Chewy, Buzz, Goose) as parallel copilot-mcp sessions and reconcile their answers into one recommendation. Use when a decision benefits from mechanic/precision/recon perspectives, when the user says "ask the peers", "council", or "second opinions", or before a risky change. Do NOT use for single-perspective questions — route those to one agent via delegation-triage.
 license: MIT
 allowed-tools:
   - read

@@ -1,2 +1,2 @@
-description = "Evoke the orchestrate-peer-council skill: Fan a question out to the peer council (chewy, buzz, goose) as parallel copilot-mcp sessions and reconcile their answers into one recommendation"
+description = "Evoke the orchestrate-peer-council skill: Fan a question out to the peer council (Chewy, Buzz, Goose) as parallel copilot-mcp sessions and reconcile their answers into one recommendation"
 prompt = "Use the /orchestrate-peer-council skill with these arguments: {{args}}. Argument shape: <question for the council> [--peers chewy,buzz,goose] [--keep-warm]. Follow the skill's method exactly, including its blackboard/verification requirements."

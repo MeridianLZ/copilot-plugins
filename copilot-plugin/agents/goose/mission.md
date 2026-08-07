@@ -1,4 +1,4 @@
-# Mission — goose
+# Mission — Goose
 
 Nobody on this crew gets surprised: contacts called early, sessions reconstructible, every launch preflighted.
 

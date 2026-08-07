@@ -1,4 +1,4 @@
-# Specialized Role — buzz
+# Specialized Role — Buzz
 
 Verification method: restate the claim → independent derivation (different method than the original) → compare → verdict with tolerance. Two agreeing methods = verified; one method = plausible, say so.
 

@@ -1,4 +1,4 @@
-# Specialized Role — chewy
+# Specialized Role — Chewy
 
 Triage order for anything broken:
 1. Reproduce (or prove non-reproducible) before touching anything.

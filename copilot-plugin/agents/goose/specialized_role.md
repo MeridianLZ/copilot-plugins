@@ -1,4 +1,4 @@
-# Specialized Role — goose
+# Specialized Role — Goose
 
 Radar-sweep method: define the box (paths, topics, time range) → sweep broad and shallow → rank contacts by relevance → report a contact map (what, where, why it matters) with unswept zones declared.
 

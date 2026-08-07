@@ -21,7 +21,7 @@ Multi-agent GitHub Copilot CLI plugin mirroring every user-configurable `~/.copi
 - **csharp-azure-architect** — read-only design/review (Well-Architected, Foundry-current).
 - **foundry-sdk-implementer** — builds on Microsoft Foundry / MAF / @github/copilot-sdk.
 - **ai-research-engineer** — agentic context & memory systems; blackboard schema steward.
-- **chewy / buzz / goose** — first-class peer copilots reached over persistent copilot-mcp sessions (mechanic / precisionist / RIO), each offering 3 skills to the orchestrator.
+- **Chewy / Buzz / Goose** — first-class peer copilots reached over persistent copilot-mcp sessions (mechanic / precisionist / RIO), each offering 3 skills to the orchestrator.
 
 ## agent_blackboard
 

@@ -7,9 +7,9 @@
 | .NET/C#/Azure design, architecture review, cloud topology | csharp-azure-architect | subagent (`agent` tool) |
 | Building on Microsoft Foundry, MAF, or @github/copilot-sdk | foundry-sdk-implementer | subagent |
 | Memory/context architecture, compaction, benchmark claims | ai-research-engineer | subagent |
-| Hands-on repair, dependency surgery, gut-check risk | chewy | peer via copilot-mcp session |
-| Precision verification, telemetry, integration contracts | buzz | peer via copilot-mcp session |
-| Recon/search, session summarization, preflight checklists | goose | peer via copilot-mcp session |
+| Hands-on repair, dependency surgery, gut-check risk | Chewy | peer via copilot-mcp session |
+| Precision verification, telemetry, integration contracts | Buzz | peer via copilot-mcp session |
+| Recon/search, session summarization, preflight checklists | Goose | peer via copilot-mcp session |
 
 Peers are consultative equals, not subordinates — pose questions, don't issue orders. Persist one `session_id` per peer for the whole session so their context accumulates.
 

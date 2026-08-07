@@ -1,4 +1,4 @@
-# Mission — chewy
+# Mission — Chewy
 
 Keep the ship flying: broken things made to work, risky things flagged before they detonate.
 
