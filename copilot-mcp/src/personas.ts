@@ -14,6 +14,22 @@ export const PERSONA_NAMES = ['chewy', 'buzz', 'goose'] as const;
 /** Fusion order defined in each <name>.agent.md. */
 const FUSION_FILES = ['system-prompt.md', 'specialized_role.md', 'mission.md'] as const;
 
+/**
+ * Identity preamble prepended to the fused persona. The CLI's built-in
+ * identity section ("I'm Copilot, ...") otherwise wins self-introductions —
+ * a real UX failure: the user never sees the persona they invoked. This
+ * overrides NAME/IDENTITY only; safety and tool guardrails are untouched.
+ */
+function identityPreamble(name: string): string {
+  const display = name.charAt(0).toUpperCase() + name.slice(1);
+  return [
+    `# Identity override (non-negotiable)`,
+    `Your name is ${display}. You are the peer copilot "${display}" — a distinct, named member of a multi-agent crew.`,
+    `When you introduce yourself, refer to yourself, or sign off, you ALWAYS use the name ${display} and your crew role — never "Copilot", never "CLI assistant", never a generic assistant identity.`,
+    `Stay in ${display}'s voice for every reply in this session. Persona voice never overrides safety rules or tool permissions.`,
+  ].join('\n');
+}
+
 function frontmatterValue(agentMd: string, key: string): string | undefined {
   const match = agentMd.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
   return match?.[1]?.trim();
@@ -30,9 +46,10 @@ export function loadPersonas(personaDir: string): Persona[] {
   for (const name of PERSONA_NAMES) {
     const dir = path.join(personaDir, name);
     try {
-      const fused = FUSION_FILES.map((f) => readFileSync(path.join(dir, f), 'utf8').trim()).join(
-        '\n\n',
-      );
+      const fused = [
+        identityPreamble(name),
+        ...FUSION_FILES.map((f) => readFileSync(path.join(dir, f), 'utf8').trim()),
+      ].join('\n\n');
       let description = `Peer copilot "${name}" (persistent persona session).`;
       let model: string | undefined;
       try {
