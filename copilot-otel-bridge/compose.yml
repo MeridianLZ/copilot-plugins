@@ -19,11 +19,15 @@ services:
       COPILOT_TRACE_DATA_DIR: /data
       COPILOT_TRACE_CONTENT_MODE: ${COPILOT_TRACE_CONTENT_MODE:-hash}
       COPILOT_TRACE_CONSOLE_MODE: ${COPILOT_TRACE_CONSOLE_MODE:-pretty}
+      COPILOT_HOME: /copilot-home
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_SERVICE_NAME: github-copilot-cli-hook-bridge
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=development,service.namespace=agent-observability
     volumes:
       - ./.copilot/telemetry:/data
+      # Native conversation replica: read-only view of the host Copilot home so
+      # the containerized bridge can project session-state/<id>/events.jsonl.
+      - ${COPILOT_HOME_HOST:-~/.copilot}:/copilot-home:ro
     ports:
       - "127.0.0.1:14329:14329"
     depends_on:

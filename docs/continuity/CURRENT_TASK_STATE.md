@@ -1,28 +1,32 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-02 (scope: Copilot OTel bridge workstream)_
+_Last updated: 2026-08-06 late (scope: trace-UI conversation replica; supersedes the same-day "post commit/push + MCP peer live-fire" state — that work is committed as `59f6eb8` + follow-ups on `feat/copilot-mcp`)_
 
 ## Where things stand
 
-The Copilot CLI OTel hook bridge is **implemented, verified, and committed** (`a2af5c3` on `feat/copilot-otel-bridge`). `copilot-otel-bridge/` at repo root is the working stack (the `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` original is a frozen, checksummed reference — never edit it). The gate `pnpm check` is green (strict typecheck, 16/16 tests, build). A synthetic smoke session was verified through all four stages: hook egress → bridge JSONL ledger → reconstructed OTel spans → dockerized collector (16 spans received), and the trace-viewer UI at `http://127.0.0.1:14329/ui` was inspected in a browser (Sidebar session list + ChatConversation pane + span waterfall all rendering correctly, hash-mode content chips included).
+**The trace viewer is now a verbatim conversation replica — implemented, live-fire verified, pushed.** Branch `feat/copilot-otel-replica` (off `feat/copilot-mcp`), 7 commits `ed40729..c6fdebb`, all under `copilot-otel-bridge/`.
 
-`~/.copilot` was updated: `hooks/copilot-otel-bridge.json` installs observers for all 14 hook events (command transport → built `dist/src/hook-egress.js`, hash content mode). `~/.copilot/settings.json` was deliberately NOT touched — the native OTel lane activates per-shell via `scripts/copilot-otel-env.{sh,ps1}` (endpoint default `http://127.0.0.1:27432`). `~/.copilot/otel_settings.jsonc` is a reference catalog only (not auto-loaded by Copilot).
+| Area | Status |
+|---|---|
+| Double hook install (every event ×2) | Fixed — `~/.copilot/hooks/` has one config; generator previews are `*.generated.preview`; `--apply` self-heals |
+| Dedupe | Payload-hash (stableJson+sha256, 10 s window, `COPILOT_TRACE_DEDUPE_WINDOW_MS`) at ingest AND projection — historical 2× ledger repairs at read time |
+| Native lane | `src/native-session.ts` + `src/native-cache.ts` read `$COPILOT_HOME/session-state/<id>/events.jsonl` incrementally; conversation projects native-first, hooks as governance overlay, `source` field says which |
+| UI | Conversation-doc renderer: user/assistant md bubbles, model chips, reasoning collapsible / encrypted marker, tool cards, nested subagent conversations + open-child-session links, permission rows, usage footer; waterfall min/max fixed |
+| Validation | `pnpm check` **34/34**; smoke (hooks-only fallback) OK; replica render of `6baa6c99…` OK; live session `d6caf69a…` verbatim in ~2-4 s |
 
-Local processes possibly still running from the verification: the bridge (node, port 14329) and the `otel-collector` container (ports 27431/27432).
+Bridge on **:14329** restarted with new dist and healthy. Test sessions disconnected.
+
+**PR #1 is open** (`feat/copilot-otel-replica` → `main`, includes copilot-mcp + level-up + replica + hook-telemetry FAQ `701ea3e` + compose COPILOT_HOME mount). KB note written to master-kb.
 
 ## Immediate next step
 
-1. **Acceptance run**: launch a real `copilot` session (trusted repo, env script dot-sourced), exercise a tool call, confirm both lanes arrive and the session appears in `/ui`.
-2. Decide merge/push of `feat/copilot-otel-bridge`.
+1. Merge decision for PR #1 (user).
+2. Optional follow-ups: copilot-mcp — expose `reasoning_effort`/`working_directory`/`system_message` (SDK supports; only `model` plumbed) and fix `tool_calls` `tool:"unknown"` summaries; native-lane OTel content flip if wanted; multi-epoch resume modeling.
 
-## Key decisions this session
+## Key decisions (2026-08-06 late)
 
-- Implementation home = top-level `copilot-otel-bridge/` (checksummed reference stays frozen under `docs/`).
-- TypeScript 7.0.2 (the guide's 6.0.0 pin is a phantom — never published).
-- Collector host ports 27431/27432 in `.env` (SSoT) because 4317/4318, 14317/14318, and 24317/24318 are all occupied on this machine.
-- UI is dependency-free static HTML served by the bridge itself — no separate frontend build.
-
-## Open questions for the user
-
-- Merge/push the branch?
-- Keep bridge + collector running as a resident service, or stop until the acceptance run?
+- Replica substrate = native session-state transcript, NOT hook payloads (no hook event carries main-agent prose — verified against the official hooks reference).
+- Hook content-mode stays `hash`; native strings get the same `redactSecrets` pass; `reasoningOpaque`/`encryptedContent` never shipped, marker only.
+- Correlate on `turnId`/`toolCallId`/`requestId`; native `parentId` is unreliable (dangling refs observed).
+- A replica turn = one user exchange; native `assistant.turn_start/end` fire per model interaction and must not open turns.
+- On-demand incremental read (UI poll = tick), no background tailers.

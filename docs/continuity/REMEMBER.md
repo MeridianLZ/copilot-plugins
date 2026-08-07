@@ -2,6 +2,45 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-06 latest (hook mechanics + SDK control surface)
+
+- **Fact:** Copilot CLI hooks have NO feedback channel to the harness except the exit code; only `preToolUse` reacts (non-zero = deny). No structured decision JSON, no arg rewriting, no context/model mutation from hooks.
+- **Fact:** hooks receive stdin JSON (+ baked env + inherited env) and run as the user — `transcriptPath` in agentStop/subagentStart/preCompact payloads gives any hook read access to the full verbatim conversation (`session-state/<id>/`).
+- **Fact (SDK 1.0.8):** session control surface = `model`, `reasoningEffort` (gated on `capabilities.supports.reasoningEffort`), `workingDirectory`, `systemMessage` (append/replace), `MemoryConfiguration`, tools/MCP servers; mid-session `session.setModel(id, {reasoningEffort})`. copilot-mcp exposes only `model` — gap filed.
+- **Invariant:** containerized bridge needs the ro `~/.copilot` mount (`COPILOT_HOME=/copilot-home`, host override `COPILOT_HOME_HOST`) or the replica silently degrades to hooks-only.
+
+## 2026-08-06 late (conversation replica)
+
+- **Correction:** test count gate is now **34** node:test cases (`pnpm check`), superseding the 18 noted earlier on 2026-08-06.
+- **Invariant:** never place two `*.json` copies of the bridge hook config in a live Copilot hooks dir — Copilot loads every `*.json` and every event fires once per file. Generator previews are `*.generated.preview` (`generate-hooks.ts targetPaths()`); `--apply` deletes stale `*.generated.json`.
+- **Invariant:** hook-event identity = sha256 of `stableJson(payload)` within `COPILOT_TRACE_DEDUPE_WINDOW_MS` (payload `timestamp` is ms-precision, so true collisions ≈ nil). `event_id` is minted per egress process and is NOT an identity across hook installs.
+- **Invariant:** the conversation replica is projected **native-first** from `$COPILOT_HOME/session-state/<session_id>/events.jsonl`; hook lane is a governance overlay and the fallback (`source: hooks-only`) for sessions with no transcript (smoke/remote). No hook event carries main-agent assistant prose (only `subagentStop` has text) — verified against the official hooks reference 2026-08-06.
+- **Native stream facts (copilot CLI 1.0.79-5):** envelope `{type,data,id,timestamp,parentId,agentId?}`; `parentId` unreliable — join on `turnId`/`toolCallId`/`requestId`; `assistant.message` chunks reassemble by `messageId`+`chunkIndex`; subagent `toolCallId` == the child hook-lane `session_id` (cross-link key); `assistant.turn_start/end` fire per model interaction — a replica turn is bounded by user messages instead; format undocumented upstream (copilot-cli#3551) → parse per-line defensively, ignore unknown types.
+- **Security seam:** native transcript strings bypass hook sanitization — `redactSecrets` must run over ALL native content before it leaves the bridge; `reasoningOpaque`/`encryptedContent` are never shipped (marker only, `reasoningText` renders when present).
+- **Pitfall:** `mcp__copilot-mcp__ask` `tool_calls` summaries report `tool:"unknown"` — copilot-mcp bridge summary bug (its event parsing predates SDK field changes), separate workstream.
+
+## 2026-08-06 (copilot-otel-bridge level-up)
+
+- **Invariant:** conversation export is server-authoritative via `src/conversation-projector.ts` (`projectConversation` + `conversationToMarkdown`). UI may fall back to client-side markdown, but MD/JSON export buttons should prefer `/api/sessions/:id/conversation[.md]`.
+- **Invariant:** `trace-projector.ts` and `conversation-projector.ts` both depend on the same FIFO lifecycle pairing semantics as `span-assembler.ts`. Change pairing rules in all three (+tests) together.
+- **Pitfall fixed:** Docker runtime image must `COPY ui ./ui` — bridge resolves `ui/index.html` relative to package root; shipping only `dist/` 404s `/ui` in containers.
+- **Pitfall fixed:** generated command hooks previously hard-coded `COPILOT_TRACE_CONTENT_MODE=hash`, ignoring bridge/container env. Generator now takes `--content-mode` / env and `--post-timeout-ms`.
+- **Pitfall:** smoke scripts still POST the bridge HTTP API directly — they validate span assembly/export, not installed command-hook egress or spool replay. Do not treat a green smoke as full hook-install proof.
+- **UI contract (extended):** `/ui` is still a single zero-dep `ui/index.html`. Required affordances: sidebar sort/filter, nested chronological conversation, code-block hover toolbar (copy, line numbers, Aa±), export copy/MD/JSON/PDF. Print CSS hides chrome for PDF.
+- **Test count gate:** `pnpm check` expects **18** node:test cases after conversation projector tests (was 16).
+
+
+## 2026-08-05 (copilot-mcp + @agent-fannypack/mcp)
+
+- **Invariant:** `agent-fannypack/mcp/` (`@agent-fannypack/mcp`) must stay app/vendor-agnostic — the three signals (ping, marco, blast timer) take injected hooks (`respond`, `onDetonate`, shared `timer`); never import copilot/bridge code into it.
+- **Invariant:** blast-timer/`onExpire` hooks register **once per process**, never inside a per-request server factory — `createMcpHandler` builds a fresh `McpServer` per request (stateless), and per-request registration stacks duplicate detonate callbacks (observed: 11 dupes before the fix in `52b7990`).
+- **MCP SDK v2 (2.0.0 stable)**: the monolithic `@modelcontextprotocol/sdk` is retired → `@modelcontextprotocol/{server,client,node}`; `serveStdio` from `@modelcontextprotocol/server/stdio`; client transports: `StreamableHTTPClientTransport` in the main export, `StdioClientTransport` under `/stdio`; **no WebSocket transport exists** (SEP-1287 is an open PR) — WS is a custom `Transport` (one JSON-RPC message per frame, same `/mcp` endpoint, `hasPerRequestStream` unset because WS shares one channel like stdio).
+- **Copilot SDK facts (1.0.8, public preview — pin exact versions):** `session.sendAndWait(opts, timeout)` resolves on the idle signal (the completed-turn contract; NOT the last delta); answer text must filter to root-agent events (`event.agentId === undefined`) or sub-agent output duplicates in; permission decisions are `{kind:'approve-once'}`/`{kind:'reject'}` with request kinds shell/write/read/mcp/custom-tool; cleanup is `session.disconnect()` (resumable) vs `client.deleteSession()` (permanent); external server mode = `copilot --headless --port N` + `RuntimeConnection.forUri` (there is **no** `cliUrl` client option despite older docs).
+- **pnpm 11 gotcha:** build-script approval lives in `pnpm-workspace.yaml` under `allowBuilds:` — the old `package.json` `pnpm.onlyBuiltDependencies` field is ignored (warns). pnpm even scaffolds the yaml with placeholder text you must edit to `true`.
+- **Ports (this machine), updated:** 27431/27432 (OTel collector), 14329 (OTel bridge), **27443** (copilot-mcp HTTP+WS — one port carries both, WS via upgrade).
+- **Registration surfaces:** Claude Code user scope in `~/.claude.json` via `claude mcp add copilot-mcp` (tools surface as `mcp__copilot-mcp__*`); Copilot side in `~/.copilot/mcp-config.json` with a `tools:` allowlist (kept to ping/marco/ask/session_list/status to bound copilot→copilot recursion).
+- **Pitfall:** file:-protocol pnpm deps are copied at install — edits to the linked package don't propagate until reinstall. Use `link:` during co-development (`@agent-fannypack/mcp` is `link:../agent-fannypack/mcp` in copilot-mcp) and rebuild fannypack (`pnpm build`) before typechecking the consumer, since types resolve from its `dist/`.
+
 ## 2026-08-02 (Copilot OTel bridge)
 
 - **Invariant:** `docs/copilot-research/CHATGPT_*` deliverables are frozen references with `SHA256SUMS` — never edit in place. The runnable implementation lives at top-level `copilot-otel-bridge/`; evolve only there.

@@ -24,6 +24,9 @@ Send-HookEvent userPromptTransformed @{ sessionId = $sessionId; timestamp = 1800
 Send-HookEvent preToolUse @{ sessionId = $sessionId; timestamp = 1800000002000; cwd = 'C:\smoke\repo'; toolName = 'powershell'; toolArgs = @{ command = 'Write-Output smoke' } }
 Send-HookEvent permissionRequest @{ sessionId = $sessionId; timestamp = 1800000002100; cwd = 'C:\smoke\repo'; toolName = 'powershell'; toolArgs = @{ command = 'Write-Output smoke' } }
 Send-HookEvent postToolUse @{ sessionId = $sessionId; timestamp = 1800000003000; cwd = 'C:\smoke\repo'; toolName = 'powershell'; toolArgs = @{ command = 'Write-Output smoke' }; toolResult = @{ resultType = 'success'; textResultForLlm = 'smoke' } }
+Send-HookEvent preToolUse @{ sessionId = $sessionId; timestamp = 1800000003500; cwd = 'C:\smoke\repo'; toolName = 'powershell'; toolArgs = @{ command = 'Write-Error failure' } }
+Send-HookEvent postToolUseFailure @{ sessionId = $sessionId; timestamp = 1800000003600; cwd = 'C:\smoke\repo'; toolName = 'powershell'; toolArgs = @{ command = 'Write-Error failure' }; error = @{ name = 'CommandFailed'; message = 'command exited with status 1'; code = 'EXIT_1' } }
+Send-HookEvent errorOccurred @{ sessionId = $sessionId; timestamp = 1800000003700; cwd = 'C:\smoke\repo'; error = @{ name = 'RecoverableSmokeError'; message = 'synthetic recoverable error'; code = 'SMOKE_ERROR' }; recoverable = $true }
 Send-HookEvent subagentStart @{ sessionId = $sessionId; timestamp = 1800000004000; cwd = 'C:\smoke\repo'; agentName = 'reviewer'; agentDisplayName = 'Reviewer' }
 Send-HookEvent subagentStop @{ sessionId = $sessionId; timestamp = 1800000005000; cwd = 'C:\smoke\repo'; agentName = 'reviewer'; agentId = 'agent-smoke'; response = 'Review passed' }
 Send-HookEvent preCompact @{ sessionId = $sessionId; timestamp = 1800000006000; cwd = 'C:\smoke\repo'; trigger = 'auto' }

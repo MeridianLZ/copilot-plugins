@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import path from 'node:path';
 import type { ContentMode } from './types.js';
 
@@ -38,6 +39,8 @@ export interface BridgeConfig {
   consoleMode: 'json' | 'pretty' | 'silent';
   otlpTracesEndpoint: string;
   serviceName: string;
+  dedupeWindowMs: number;
+  copilotHome: string;
 }
 
 export function loadConfig(): BridgeConfig {
@@ -62,6 +65,8 @@ export function loadConfig(): BridgeConfig {
     consoleMode: consoleValue,
     otlpTracesEndpoint:
       process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'http://127.0.0.1:27432/v1/traces',
-    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge'
+    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge',
+    dedupeWindowMs: intFromEnv('COPILOT_TRACE_DEDUPE_WINDOW_MS', 10_000),
+    copilotHome: process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot')
   };
 }

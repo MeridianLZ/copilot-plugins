@@ -1,3 +1,4 @@
+import { createPayloadDeduper } from './dedupe.js';
 import {
   getString,
   isHookEnvelope,
@@ -58,7 +59,7 @@ export interface SessionTrace {
 
 export function parseLedgerLines(lines: readonly string[]): HookEnvelope[] {
   const seen = new Set<string>();
-  const envelopes: HookEnvelope[] = [];
+  const collected: HookEnvelope[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
@@ -70,10 +71,14 @@ export function parseLedgerLines(lines: readonly string[]): HookEnvelope[] {
     }
     if (!isHookEnvelope(parsed) || seen.has(parsed.event_id)) continue;
     seen.add(parsed.event_id);
-    envelopes.push(parsed);
+    collected.push(parsed);
   }
-  envelopes.sort((left, right) => eventTimeMs(left) - eventTimeMs(right));
-  return envelopes;
+  collected.sort((left, right) => eventTimeMs(left) - eventTimeMs(right));
+  // Payload-identity dedupe must run on time-sorted input: multiple hook
+  // installations re-emit the same payload under fresh event_ids, so the
+  // event_id set above cannot catch them.
+  const deduper = createPayloadDeduper();
+  return collected.filter((envelope) => !deduper.isDuplicate(envelope.payload, eventTimeMs(envelope)));
 }
 
 export function eventTimeMs(envelope: HookEnvelope): number {
@@ -112,6 +117,13 @@ export function projectSessions(envelopes: readonly HookEnvelope[]): SessionSumm
     summary.event_count += 1;
     summary.started_at_ms = Math.min(summary.started_at_ms, timeMs);
     summary.last_event_at_ms = Math.max(summary.last_event_at_ms, timeMs);
+    // Copilot emits sessionEnd on every idle; activity after an "end"
+    // means the session is still live (resumed), not a new one.
+    if (summary.ended_at_ms !== undefined && timeMs > summary.ended_at_ms && payload.hook_event_name !== 'sessionEnd') {
+      delete summary.ended_at_ms;
+      delete summary.end_reason;
+      summary.status = 'open';
+    }
     const cwd = getString(payload, 'cwd');
     if (cwd) summary.cwd = cwd;
 
@@ -224,7 +236,9 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
         break;
       }
       case 'sessionEnd': {
-        closeSessionChildren(timeMs, 'session_end');
+        // Copilot emits sessionEnd per idle; only the first for an open
+        // session may sweep children, or a stray repeat orphans the rest.
+        if (session) closeSessionChildren(timeMs, 'session_end');
         parentId = session?.span.span_id;
         if (session) {
           const reason = getString(payload, 'reason');

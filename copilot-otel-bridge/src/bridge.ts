@@ -7,7 +7,10 @@ import { createEnvelope } from './envelope.js';
 import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
 import { SpanAssembler } from './span-assembler.js';
-import { parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
+import { conversationToMarkdown, projectConversation } from './conversation-projector.js';
+import { createPayloadDeduper } from './dedupe.js';
+import { NativeSessionCache } from './native-cache.js';
+import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
 function uiIndexPath(): string {
@@ -82,6 +85,7 @@ async function main(): Promise<void> {
 
   const telemetry = initializeTelemetry(config);
   const assembler = new SpanAssembler(telemetry.tracer, config);
+  const nativeCache = new NativeSessionCache(config.copilotHome);
   let accepted = 0;
   let duplicates = 0;
   let failed = 0;
@@ -101,8 +105,16 @@ async function main(): Promise<void> {
     return true;
   };
 
+  const payloadDeduper = createPayloadDeduper(config.dedupeWindowMs);
+
   const consumeUnserialized = async (envelope: HookEnvelope): Promise<void> => {
     if (!rememberEventId(envelope.event_id)) {
+      duplicates += 1;
+      return;
+    }
+    // Multiple hook installations re-emit the same payload under fresh
+    // event_ids; identity is the payload itself (its ms timestamp included).
+    if (payloadDeduper.isDuplicate(envelope.payload, eventTimeMs(envelope))) {
       duplicates += 1;
       return;
     }
@@ -180,8 +192,30 @@ async function main(): Promise<void> {
       }
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
         await ingestTail;
-        const sessionId = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
+        const remainder = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
+        const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
+        const sessionId = conversationMatch ? conversationMatch[1] ?? remainder : remainder;
         const ledger = await readLedger(config.eventsFile);
+        if (conversationMatch) {
+          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
+          const conversation = projectConversation(ledger, sessionId, nativeEvents);
+          if (conversation.event_count === 0) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const format = conversationMatch[2] ?? url.searchParams.get('format') ?? 'json';
+          if (format === 'md' || format === 'markdown') {
+            const markdown = conversationToMarkdown(conversation);
+            response.writeHead(200, {
+              'content-type': 'text/markdown; charset=utf-8',
+              'content-disposition': `attachment; filename="conversation-${sessionId}.md"`
+            });
+            response.end(markdown);
+            return;
+          }
+          sendJson(response, 200, conversation);
+          return;
+        }
         const trace = projectSessionTrace(ledger, sessionId);
         if (trace.events.length === 0) {
           sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });

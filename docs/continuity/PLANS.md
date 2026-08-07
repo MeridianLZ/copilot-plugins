@@ -11,6 +11,37 @@ A Claude Code plugin marketplace (`fintech-frontend`, `fintech-backend`) for ent
 3. **Not yet started** — resolving the orphaned `plugins/*/scripts/guard-core.sh` copies (see REMEMBER.md); deciding whether per-plugin write guards should be collapsed into calls to `shared/guards/guard-core.sh` instead of inlining duplicate checks.
 4. **Agent observability — Copilot OTel hook bridge** (working, committed 2026-08-02, branch `feat/copilot-otel-bridge`, commit `a2af5c3`) — the ChatGPT research deliverable `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` (frozen, SHA256SUMS-checksummed) promoted to top-level `copilot-otel-bridge/` as the runnable implementation: dual-lane (Copilot native OTel + hook JSONL ledger) bridge on port 14329, OTel Collector via docker compose on host ports 27431/27432, user-scope hooks installed to `~/.copilot/hooks/copilot-otel-bridge.json` (all 14 events), plus a self-contained trace-viewer UI at `/ui` (session Sidebar + ChatConversation pane with span waterfall) backed by `/api/sessions` and a pure-data `trace-projector.ts`.
 
+   **2026-08-06 level-up (uncommitted):** Dockerfile copies `ui/`; hook generator `--content-mode`/`--post-timeout-ms`; smoke includes failure+error; `conversation-projector.ts` + `/api/sessions/:id/conversation[.md]`; rewritten nested conversation UI with sort/filter, code-block toolbar, export; validation **18/18**.
+
+5. **Agent interop — copilot-mcp wrapper + @agent-fannypack/mcp** (done & pushed 2026-08-05, branch `feat/copilot-mcp`, commits `3fa0f1e..db436b2`) — the full agentic Copilot CLI wrapped as an MCP server via `@github/copilot-sdk` 1.0.8 (`copilot-mcp/`): `ask` + session lifecycle + models/status tools over three transports (stdio; Streamable HTTP serving MCP spec 2026-07-28 **and** legacy 2025-11-25 from one endpoint via TS SDK v2 stable 2.0.0; WebSocket per SEP-1287 upgrade on the same `/mcp` path — custom Transport, one port **27443**). Plus `agent-fannypack/mcp/` = standalone reusable `@agent-fannypack/mcp` package: ping (transport liveness), marco/polo (agent liveness), blast-timer dead-man watchdog with `withCheckIn` (every action call = implicit check-in; zero ⇒ connection blown up to nothing). Standalone JSON-RPC 2.0 typings + helper classes in `copilot-mcp/src/jsonrpc/`.
+
+6. **Trace UI → full conversation replica** (done & pushed 2026-08-06, branch `feat/copilot-otel-replica` off `feat/copilot-mcp`, commits `ed40729..c6fdebb`) — root-caused why the viewer fell short of a verbatim replica and fixed the whole pipeline: (RC1) double hook install (`.generated.json` + `.json` both live → every event ×2; preview now `*.generated.preview`, payload-hash dedupe at ingest+projection); (RC2/3) hook lane structurally lacks main-agent assistant prose at any content mode; (RC4) the real substrate is Copilot's native `~/.copilot/session-state/<id>/events.jsonl` — new `native-session.ts` projects it native-first (chunk reassembly, toolCallId/turnId joins, reasoningText, subagent `toolCallId`==child hook session id cross-links, permissions, usage) with hooks as governance overlay + `native-cache.ts` on-demand incremental reader; UI rewritten to render the conversation document (user/assistant markdown bubbles, model chips, reasoning collapsibles, tool cards, nested subagent conversations, usage footer, fixed waterfall). 34/34 tests; live-fire acceptance rendered a fresh copilot-mcp session verbatim in near-real-time.
+
+## Current facts (as of 2026-08-06 late, replica scope)
+
+- **PR #1 open**: `feat/copilot-otel-replica` → `main` (carries copilot-mcp + level-up + replica). FAQ answering hook-telemetry questions at `copilot-otel-bridge/docs/HOOK_TELEMETRY_FAQ.md` (commit `701ea3e`) + KB note `projects/fintech-marketplace/copilot-otel-bridge/copilot-cli-hook-telemetry-faq-2026-08-06`; compose `hook-bridge` now mounts host `~/.copilot` ro (`COPILOT_HOME=/copilot-home`) so the containerized UI serves the replica.
+
+- Branch `feat/copilot-otel-replica` pushed: `ed40729` (hook preview fix) → `66f67cf` (dedupe) → `0b96ba2` (native projector+cache) → `221f62d` (turn semantics) → `1129f1f` (UI renderer) → `2d492a7` (md fence fix) → `c6fdebb` (docs). Prior level-up was already committed by the parallel session as `59f6eb8` on `feat/copilot-mcp`.
+- Test gate now **34/34** (`pnpm check`); conversation schema `1.1.0` with `source: native+hooks | hooks-only`.
+- `~/.copilot/hooks/` now holds exactly ONE bridge config; the historical 2× ledger self-repairs at projection time.
+- Bridge on 14329 restarted with new dist; acceptance sessions: `6baa6c99…` (full replica render incl. 5 subagent conversations, AIU 275.13) and live `d6caf69a…` (verbatim markdown within ~2-4 s).
+
+## Current facts (as of 2026-08-06, OTel level-up scope)
+
+- Uncommitted delta under `copilot-otel-bridge/`: `Dockerfile`, `README.md`, `VALIDATION.md`, `scripts/smoke-test.{ps1,sh}`, `src/bridge.ts`, `src/generate-hooks.ts`, `ui/index.html`, **new** `src/conversation-projector.ts`, **new** `test/conversation-projector.test.ts`.
+- Validation: `pnpm check` = typecheck + **18/18** tests + build.
+- Live verify: bridge healthy on 14329; smoke `smoke-session-1785975144` conversation API → 15 events, 2 tools, 2 errors; `/ui` 200 with export + code-toolbar.
+- Earlier real CLI dual-lane evidence still valid (native `invoke_agent`/`chat`/`execute_tool` + hook lifecycle at collector; organic session `6baa6c99…`).
+- Commit/PR for this level-up still open; prior OTel commit `a2af5c3` on `feat/copilot-otel-bridge` still not pushed (confirm branch state before stacking commits).
+
+## Current facts (as of 2026-08-05, copilot-mcp scope)
+
+- Branch `feat/copilot-mcp` (from `main` @ `2df8536`) **pushed** to origin: 7 atomic commits `3fa0f1e` (fannypack) → `fe6346b` (scaffold+jsonrpc) → `649793d` (bridge) → `81b3045` (server core) → `52b7990` (transports) → `7d46fc5` (live-fire client) → `db436b2` (README).
+- Live-fire verified on all three transports against the real Copilot process: `ask("What is 2+2?")`→"4" (~7s), marco→"polo" via a real session (7–12s RTT), blast-timer detonation observed killing the HTTP server (exit 1). Cross-agent: headless `claude -p --allowedTools mcp__copilot-mcp__ask` → "Paris".
+- Registered: Claude Code user scope (`~/.claude.json`, `claude mcp list` → Connected) and `~/.copilot/mcp-config.json` (allowlisted: ping, marco, ask, session_list, status).
+- OTel acceptance evidence (2026-08-03, seen 2026-08-05 in the still-running bridge's ledger): a **real** Copilot session `6baa6c99…` with subagents + MCP tool calls flowed through the hook lane — the phase-4 "real copilot acceptance run" happened organically; `/ui` render + native-lane arrival not yet formally checked off.
+- Parallel uncommitted work NOT from the 2026-08-05 session: `copilot-otel-bridge/` modifications + new `src/conversation-projector.ts` (+ test) present in the working tree — another session's work; preserve, do not revert.
+
 ## Current facts (as of 2026-08-02, OTel scope)
 
 - Branch `feat/copilot-otel-bridge` (from `main` @ `6506241`), one commit `a2af5c3` — 42 files, `copilot-otel-bridge/` only. Not pushed.
