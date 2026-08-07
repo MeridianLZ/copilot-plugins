@@ -50,7 +50,10 @@ export interface NativeProjection {
 export function resolveSessionStatePath(sessionId: string, copilotHome?: string): string {
   const home = copilotHome ?? process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot');
   // session_id arrives from external payloads; keep it from escaping the dir.
-  const safe = path.basename(sessionId);
+  // POSIX basename treats "\\" as a plain character, so normalize Windows
+  // separators first, and never let a bare ".."/"." survive as the component.
+  let safe = path.basename(sessionId.replace(/\\/g, '/'));
+  if (safe === '..' || safe === '.' || safe === '') safe = '_';
   return path.join(home, 'session-state', safe, 'events.jsonl');
 }
 
