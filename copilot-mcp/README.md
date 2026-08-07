@@ -12,7 +12,7 @@ The **full GitHub Copilot CLI agentic process wrapped as an MCP server**, so oth
 | Tool | Purpose |
 |---|---|
 | `ask` | **The headline tool.** Prompt → completed Copilot turn (idle-signal semantics, timeout-guarded). `session_id` continues a conversation. |
-| `chewy` / `buzz` / `goose` | Peer-copilot persona tools: same contract as `ask`, but the session pins a single SDK custom agent (`customAgents` + `agent` select-at-create, `infer:false`) fused from the copilot-home agent markdown (`COPILOT_MCP_PERSONA_DIR`), with the persona's `.agent.md`-pinned model. |
+| `chewy` / `buzz` / `goose` | Peer-copilot persona tools (Chewy, Buzz, Goose): same contract as `ask`, but the session pins a single SDK custom agent (`customAgents` + `agent` select-at-create, `infer:false`) fused from the copilot-home agent markdown (`COPILOT_MCP_PERSONA_DIR`), with the persona's `.agent.md`-pinned model. |
 | `session_create` / `session_list` / `session_destroy` | Persistent multi-turn session lifecycle |
 | `session_events` | Recent sanitized lifecycle/tool events (reasoning withheld, verbose tool output dropped) |
 | `models_list` | Models available to the wrapped CLI |
