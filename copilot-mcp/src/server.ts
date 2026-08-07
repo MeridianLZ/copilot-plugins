@@ -194,7 +194,7 @@ export function buildServer(opts: BuildServerOptions): McpServer {
     withCheckIn(timer, async () => textResult(await bridge.status())),
   );
 
-  // --- Peer persona tools (chewy / buzz / goose) -------------------------
+  // --- Peer persona tools (Chewy / Buzz / Goose) -------------------------
   // Each tool is a first-class peer copilot: same contract as `ask`, but the
   // session pins a single SDK custom agent (agent select-at-create, infer:false)
   // built from the persona's fused markdown and its .agent.md-pinned model.
