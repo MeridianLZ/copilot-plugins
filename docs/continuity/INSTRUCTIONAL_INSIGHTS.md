@@ -24,6 +24,26 @@ _Append-only reusable patterns and lessons for working in this repo (and similar
 - **Smoke tests should include at least one ERROR path.** Happy-path-only smoke left `postToolUseFailure` and `errorOccurred` unproven until coverage forced them — bake those into the default smoke.
 - **Subagent teams are useful for parallel research/implementation, but the controller must integrate.** Hardening agent + UI agent + coordinator-owned conversation API avoided merge conflicts by clear file ownership; still required a final export-wiring pass on `ui/index.html`.
 
+## 2026-08-08 — secret-channel incident
+
+- **Never place a secret-bearing script in an output pipeline.** The command was
+  intended to send a script to WSL, but `[Console]::Out.Write($script) | wsl ...`
+  made the entire script a captured tool result. Redirected stdin is only safe
+  when stdout/stderr are separately suppressed and the helper is fixed,
+  non-echoing, and tested with a synthetic canary.
+- **Base64 expands the blast radius without reducing it.** Any incident scan
+  must search raw, base64, URL-encoded, and other reversible representations.
+- **Trace provenance, not just the immediate command.** The direct command read
+  inherited process variables, while the local chain also included
+  `.env.local`, User-scope registry values, `.gitconfig`, `.npmrc`, and the WSL
+  systemd drop-in. Incident reports must distinguish direct reads from source and
+  sink artifacts.
+- **Rotation does not clear inherited state.** A long-lived shell can retain the
+  pre-rotation value; rotation acceptance requires new processes plus a fingerprint
+  mismatch and cleanup of all local copies.
+- **Security is part of evidence correctness.** A technically passing telemetry
+  run must remain failed if its evidence handling leaks a credential.
+
 
 ## 2026-08-05
 

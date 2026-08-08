@@ -1,6 +1,27 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-06 late (scope: trace-UI conversation replica; supersedes the same-day "post commit/push + MCP peer live-fire" state — that work is committed as `59f6eb8` + follow-ups on `feat/copilot-mcp`)_
+## 2026-08-08 — CRITICAL proxy credential exposure
+
+**Status:** Report written; remediation implementation remains gated.
+
+- Crisis report: `docs/security/incidents/2026-08-08-proxy-credential-exposure.md`.
+- Compromised value: identical authenticated `HTTP_PROXY`/`HTTPS_PROXY` URI,
+  endpoint `vm-mb-az035.meridianbanker.com:8080`, decoded length 87, fingerprint
+  `6bbf5140efb3dcd781d0c01d7f9331f88e4fb058766740b2727c40f8d13bbd52`.
+- Exposure: Docker proxy command event lines 2689–2690 in the Copilot transcript;
+  `[Console]::Out.Write($script) | wsl ...` emitted the base64-bearing script.
+- Direct output sink: `/etc/systemd/system/docker.service.d/proxy.conf`.
+- Provenance/storage: `C:\Users\lzautke\.env.local` references
+  `HKCU:\Environment`; plaintext copies are also in `.gitconfig` and `.npmrc`.
+- User reports remote rotation, but this long-lived process still contains the
+  exposed fingerprint; restart and clean all stale local copies before rerun.
+- Required remediation scope: B+C — sealed stdin/credential-channel handoff,
+  environment-only accessor, no plaintext tool config, then credentialless local
+  proxy gateway.
+- Do not begin dependent telemetry implementation until the clean non-native
+  rerun proves zero raw/base64/encoded canary matches.
+
+_Historical state below is retained; this file was superseded by the 2026-08-08 crisis-remediation state above._
 
 ## Where things stand
 

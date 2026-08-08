@@ -2,6 +2,30 @@
 
 _Newest first._
 
+## 2026-08-08 — critical proxy credential exposure report
+
+- **Finding:** The Docker proxy setup read inherited process
+  `$HTTP_PROXY`/`$HTTPS_PROXY`, base64-encoded both identical authenticated
+  values, and emitted the generated script through
+  `[Console]::Out.Write($script) | wsl ...`.
+- **Exact identifier without secret reproduction:** `http://` proxy endpoint
+  `vm-mb-az035.meridianbanker.com:8080`, userinfo present, decoded length 87,
+  base64 length 116, SHA-256
+  `6bbf5140efb3dcd781d0c01d7f9331f88e4fb058766740b2727c40f8d13bbd52`.
+- **Evidence:** transcript `events.jsonl` lines 2689–2690; failed run
+  `2026-08-08T13-43-32-0600_bootstrap-nonnative-01`; verification and correction
+  hashes remain sealed.
+- **Files:** direct Docker sink
+  `/etc/systemd/system/docker.service.d/proxy.conf`; provenance
+  `C:\Users\lzautke\.env.local` → `HKCU:\Environment`; plaintext copies in
+  `C:\Users\lzautke\.gitconfig` and `C:\Users\lzautke\.npmrc`.
+- **Response:** crisis report written; B+C remediation approved:
+  environment-only accessor, protected WSL credential channel, no plaintext Git/npm
+  proxy state, then credentialless local gateway.
+- **Gate:** user reports remote rotation, but the current long-lived process still
+  carries the exposed fingerprint. Restart/cleanup and a clean canary-negative
+  non-native run are mandatory before downstream work.
+
 ## 2026-08-06 (latest) - hook-telemetry FAQ, container replica mount, PR #1
 
 - **Request**: answer (md + KB): value of custom hook telemetry; hook inputs/memory/context; harness state beyond exit code; exit-code-1 uses; UI dockerized?; can primary agent set copilot model/context/effort — then PR + continuity.
@@ -69,4 +93,3 @@ _Newest first._
 - Verified (Bash, Git Bash on Windows): `jq --version` → 1.8.1. `guard-core.sh --dialect plain` denies a `kubectl delete pod x` command (`BLOCKED: Direct cluster mutation blocked...`, exit 1) and a `double Amount;` C# snippet (`BLOCKED: Floating-point money type...`, exit 1); allows `ls` (exit 0). `bash -n build/build.sh` → syntax OK. Did **not** run the full `build/build.sh` (would rewrite dirty `targets/`).
 - User then ran `/model` → Sonnet 5, `/effort` → high, then `/continuity`.
 - This continuity refresh: no prior continuity files existed in the repo (`Glob` for all six canonical names → no results); created all six fresh at repo root, grounded in git log (`f87c365` "Initial prototype", 2026-07-08, single commit) and current `git status --short` (README.md modified; AGENTS.md, CLAUDE.md, build/, plugins/*/scripts/guard-core.sh, shared/, targets/ all untracked).
-

@@ -9,6 +9,28 @@ _Append-only durable facts, invariants, and pitfalls. Do not delete; correct wit
 - **Fact (SDK 1.0.8):** session control surface = `model`, `reasoningEffort` (gated on `capabilities.supports.reasoningEffort`), `workingDirectory`, `systemMessage` (append/replace), `MemoryConfiguration`, tools/MCP servers; mid-session `session.setModel(id, {reasoningEffort})`. copilot-mcp exposes only `model` — gap filed.
 - **Invariant:** containerized bridge needs the ro `~/.copilot` mount (`COPILOT_HOME=/copilot-home`, host override `COPILOT_HOME_HOST`) or the replica silently degrades to hooks-only.
 
+## 2026-08-08 — proxy credential incident invariants
+
+- **Security fact:** An authenticated proxy URI was exposed as reversible base64
+  when a PowerShell command wrote a generated WSL systemd script to stdout while
+  also piping it to `wsl.exe`.
+- **Exact non-secret identity:** identical `HTTP_PROXY`/`HTTPS_PROXY`, endpoint
+  `vm-mb-az035.meridianbanker.com:8080`, decoded length 87, fingerprint
+  `6bbf5140efb3dcd781d0c01d7f9331f88e4fb058766740b2727c40f8d13bbd52`.
+- **Invariant:** Base64 is never a security boundary. Secret-bearing scripts must
+  never pass through stdout, stderr, tool arguments, shell history, telemetry,
+  screenshots, or runbook text.
+- **Invariant:** Runtime proxy access is process-environment-only:
+  `$HTTP_PROXY` and `$HTTPS_PROXY` must be present, identical, validated, and
+  kept in memory.
+- **Invariant:** Authenticated proxy URLs must not be persisted in Git config,
+  npm config, Compose files, systemd text, or project documentation.
+- **Invariant:** Sealed evidence is append-only; a security-invalid run remains
+  failed and receives corrections as new records.
+- **Gate:** A post-rotation shell can proceed only after stale local copies are
+  removed and a canary run proves zero raw, base64, URL-encoded, username, or
+  password matches in every captured surface.
+
 ## 2026-08-06 late (conversation replica)
 
 - **Correction:** test count gate is now **34** node:test cases (`pnpm check`), superseding the 18 noted earlier on 2026-08-06.

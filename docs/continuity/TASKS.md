@@ -1,5 +1,24 @@
 # TASKS
 
+## Critical security incident — 2026-08-08
+
+- [x] Preserve the failed bootstrap evidence and correction records.
+- [x] Identify the exposed value without reproducing the raw credential:
+  identical authenticated `HTTP_PROXY`/`HTTPS_PROXY`, endpoint
+  `vm-mb-az035.meridianbanker.com:8080`, 87-byte decoded URI, fingerprint
+  `6bbf5140efb3dcd781d0c01d7f9331f88e4fb058766740b2727c40f8d13bbd52`.
+- [x] Identify the direct transcript event and Docker systemd destination.
+- [x] Identify provenance and plaintext copies: `.env.local`,
+  `HKCU:\Environment`, `.gitconfig`, `.npmrc`.
+- [x] Write crisis report:
+  `docs/security/incidents/2026-08-08-proxy-credential-exposure.md`.
+- [ ] Restart all inherited shells/services after rotation.
+- [ ] Remove stale values from User environment, Git, npm, and WSL systemd.
+- [ ] Implement the environment-only accessor and sealed WSL credential channel.
+- [ ] Implement the credentialless local proxy gateway.
+- [ ] Run a new append-only non-native checkpoint with canary leakage scans.
+- [ ] Mark `bootstrap-planning-otel` done only after the clean checkpoint passes.
+
 ## Done — 2026-08-06 late (conversation replica, branch `feat/copilot-otel-replica`, pushed)
 
 - [x] Investigate trace UI shortfall: click-through 6 rich sessions + live copilot-mcp session; root-caused all missing spans (double hook install ×2 events; hash content; hook lane lacks assistant prose; native session-state transcript unread; UI raw-JSON fallthrough).

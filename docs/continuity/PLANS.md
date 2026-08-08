@@ -1,5 +1,25 @@
 # PLANS
 
+## Crisis remediation gate — 2026-08-08
+
+The bootstrap run was technically successful but failed its security gate because
+an authenticated proxy URI was emitted as reversible base64 in the Copilot
+transcript. The authoritative incident report is
+`docs/security/incidents/2026-08-08-proxy-credential-exposure.md`.
+
+The next plan is B+C:
+
+1. Rotate/revoke and remove stale local copies without rewriting sealed evidence.
+2. Enforce an environment-only proxy accessor.
+3. Replace interpolated WSL commands with a fixed helper and protected stdin or
+   systemd credential channel.
+4. Remove authenticated proxy URLs from Git/npm configuration.
+5. Add a credentialless local proxy gateway.
+6. Repeat Task 0 under a new run ID with raw/base64/URL-encoded canary scans.
+
+No downstream native OTel or UI implementation task may start until the clean
+non-native checkpoint passes both technical and security verification.
+
 ## Goal
 
 A Claude Code plugin marketplace (`fintech-frontend`, `fintech-backend`) for enterprise fintech/banking work, with compliance-enforcement hooks (PCI-DSS, SOX, SOC 2, GLBA-FFIEC), now expanding to target four coding agents (Claude Code, Codex, Cursor, Copilot CLI) from one canonical source.
