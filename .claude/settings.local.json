@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/me/.copilot/**)"
+      "Read(//c/Users/me/.copilot/**)",
+      "mcp__github__search_code",
+      "mcp__github__get_file_contents"
     ]
   }
 }
