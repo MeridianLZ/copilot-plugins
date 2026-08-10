@@ -1,5 +1,35 @@
 # PLANS
 
+## Current status — 2026-08-10
+
+The approved staged design is committed in
+`docs/superpowers/specs/2026-08-10-copilot-otel-remediation-and-completion-design.md`;
+execution plans are committed under `docs/superpowers/plans/`.
+
+The implementation worktree has completed the local security/runtime phase,
+native OTel parser/cache, Collector durable signal lane, and source
+coverage/correlation slice. Commits through the current checkpoint are:
+
+`3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`, `0936e70`,
+`ab84a74`, `a5c44e1`, `21402e6`, `486d345`, `dd4b6ec`.
+
+The remaining critical path is now:
+
+1. Restore a reliable MCP dependency install through the px-backed npm
+   configuration without exposing credentials.
+2. Implement MCP W3C context propagation and peer-session linkage.
+3. Finish the UI trace/coverage inspector against the native OTel and
+   correlation APIs.
+4. Add append-only evidence recording and run the clean non-native plus full
+   dual-lane acceptance runs.
+
+The historical proxy incident remains a separate immutable failed run. The
+user's px/Credential Store remediation is an external-egress control; local
+bridge, Collector, UI, and hook telemetry remain no-proxy.
+
+The older crisis-remediation gate below is retained as history, but its
+implementation status is superseded by the current worktree facts above.
+
 ## Crisis remediation gate — 2026-08-08
 
 The bootstrap run was technically successful but failed its security gate because
