@@ -294,3 +294,78 @@ test('CopilotBridge stores stable peer linkage without duplicate records or secr
   assert.equal(linked?.peer_link_count, 2);
   assert.equal(JSON.stringify({ events, sessions }).includes('TOP-SECRET-CANARY'), false);
 });
+
+test('CopilotBridge does not hydrate session peer linkage from fabricated failed-session IDs', async () => {
+  const bridge = new BridgeWithFakeClient(new FakeClient());
+  const carrier = validateCarrier({ traceparent: VALID_TRACEPARENT, tracestate: 'acme=foo' });
+
+  for (let index = 0; index < 20; index++) {
+    bridge.recordPeerLink({
+      server: 'copilot-mcp',
+      toolName: 'ask',
+      status: 'failed',
+      requestCarrier: carrier,
+      sessionId: `fabricated-${index}`,
+      peerRequestId: `req-${index}`,
+      transport: 'ws',
+    });
+  }
+  bridge.recordPeerLink({
+    server: 'copilot-mcp',
+    toolName: 'ask',
+    status: 'failed',
+    requestCarrier: carrier,
+    sessionId: 'inner-session-bridge',
+    peerRequestId: 'req-shadow',
+    transport: 'ws',
+  });
+
+  const created = await bridge.createSession();
+  assert.equal(created.peer_trace_id, undefined);
+  assert.equal(created.peer_transport, undefined);
+
+  const status = await bridge.status();
+  const peerLinks = (status['peer_links'] as unknown[]) ?? [];
+  assert.equal(peerLinks.length, 0);
+});
+
+test('CopilotBridge evicts old peer-link dedupe keys when buffer exceeds 200 entries', async () => {
+  const bridge = new BridgeWithFakeClient(new FakeClient());
+  const carrier = validateCarrier({ traceparent: VALID_TRACEPARENT, tracestate: 'acme=foo' });
+  const session = await bridge.createSession();
+
+  for (let index = 0; index < 250; index++) {
+    bridge.recordPeerLink({
+      server: 'copilot-mcp',
+      toolName: 'ask',
+      status: 'complete',
+      requestCarrier: carrier,
+      sessionId: session.session_id,
+      peerRequestId: `peer-${index}`,
+      transport: 'ws',
+    });
+  }
+
+  const firstBatch = bridge
+    .sessionEvents(session.session_id)
+    .filter((event) => event['type'] === 'mcp.peer_link');
+  assert.equal(firstBatch.length, 200);
+  assert.equal(firstBatch.some((event) => event['peer_request_id'] === 'peer-0'), false);
+  assert.equal(firstBatch.some((event) => event['peer_request_id'] === 'peer-249'), true);
+
+  bridge.recordPeerLink({
+    server: 'copilot-mcp',
+    toolName: 'ask',
+    status: 'complete',
+    requestCarrier: carrier,
+    sessionId: session.session_id,
+    peerRequestId: 'peer-0',
+    transport: 'ws',
+  });
+
+  const secondBatch = bridge
+    .sessionEvents(session.session_id)
+    .filter((event) => event['type'] === 'mcp.peer_link');
+  assert.equal(secondBatch.length, 200);
+  assert.equal(secondBatch.some((event) => event['peer_request_id'] === 'peer-0'), true);
+});

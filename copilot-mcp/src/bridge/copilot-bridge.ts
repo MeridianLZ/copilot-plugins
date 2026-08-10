@@ -55,6 +55,7 @@ interface TrackedSession {
   events: SessionEvent[];
   peerLinks: Array<Record<string, unknown>>;
   peerLinkKeys: Set<string>;
+  peerLinkOrder: string[];
   unsubscribe: () => void;
 }
 
@@ -128,10 +129,14 @@ export class CopilotBridge {
     return truncated.length > 0 ? truncated : undefined;
   }
 
-  #pushPeerLink(tracked: TrackedSession, event: Record<string, unknown>): void {
+  #pushPeerLink(tracked: TrackedSession, event: Record<string, unknown>, dedupeKey: string): void {
     tracked.peerLinks.push(event);
-    if (tracked.peerLinks.length > PEER_LINK_BUFFER) {
-      tracked.peerLinks.splice(0, tracked.peerLinks.length - PEER_LINK_BUFFER);
+    tracked.peerLinkKeys.add(dedupeKey);
+    tracked.peerLinkOrder.push(dedupeKey);
+    while (tracked.peerLinks.length > PEER_LINK_BUFFER) {
+      tracked.peerLinks.shift();
+      const evictedKey = tracked.peerLinkOrder.shift();
+      if (evictedKey !== undefined) tracked.peerLinkKeys.delete(evictedKey);
     }
   }
 
@@ -147,33 +152,29 @@ export class CopilotBridge {
     const key = `${toolName}|${status}|${sessionId ?? ''}|${requestId ?? ''}|${ids.traceId}|${ids.spanId}`;
     const tracked = sessionId ? this.#sessions.get(sessionId) : undefined;
     if (tracked && tracked.peerLinkKeys.has(key)) return;
+    if (!sessionId || !tracked) return;
 
     const now = new Date().toISOString();
-    if (sessionId) {
-      const summary = this.#peerBySession.get(sessionId);
-      if (!summary) {
-        this.#peerBySession.set(sessionId, {
-          traceId: ids.traceId,
-          spanId: ids.spanId,
-          ...(requestId !== undefined ? { requestId } : {}),
-          ...(transport !== undefined ? { transport } : {}),
-          linkCount: 1,
-          firstSeenAt: now,
-          lastSeenAt: now,
-        });
-      } else {
-        summary.traceId = ids.traceId;
-        summary.spanId = ids.spanId;
-        if (requestId !== undefined) summary.requestId = requestId;
-        if (transport !== undefined) summary.transport = transport;
-        summary.linkCount += 1;
-        summary.lastSeenAt = now;
-      }
+    const summary = this.#peerBySession.get(sessionId);
+    if (!summary) {
+      this.#peerBySession.set(sessionId, {
+        traceId: ids.traceId,
+        spanId: ids.spanId,
+        ...(requestId !== undefined ? { requestId } : {}),
+        ...(transport !== undefined ? { transport } : {}),
+        linkCount: 1,
+        firstSeenAt: now,
+        lastSeenAt: now,
+      });
+    } else {
+      summary.traceId = ids.traceId;
+      summary.spanId = ids.spanId;
+      if (requestId !== undefined) summary.requestId = requestId;
+      if (transport !== undefined) summary.transport = transport;
+      summary.linkCount += 1;
+      summary.lastSeenAt = now;
     }
 
-    if (!sessionId) return;
-    if (!tracked) return;
-    tracked.peerLinkKeys.add(key);
     this.#pushPeerLink(tracked, {
       type: 'mcp.peer_link',
       timestamp: now,
@@ -185,7 +186,7 @@ export class CopilotBridge {
       session_id: sessionId,
       ...(requestId !== undefined ? { peer_request_id: requestId } : {}),
       ...(transport !== undefined ? { peer_transport: transport } : {}),
-    });
+    }, key);
   }
 
   async createSession(model?: string, peer?: PeerToolLinkContext): Promise<SessionInfo> {
@@ -227,6 +228,7 @@ export class CopilotBridge {
       events,
       peerLinks: [],
       peerLinkKeys: new Set<string>(),
+      peerLinkOrder: [],
       unsubscribe,
     };
     this.#sessions.set(session.sessionId, tracked);
