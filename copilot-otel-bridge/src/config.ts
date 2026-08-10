@@ -48,13 +48,25 @@ export interface BridgeConfig {
   copilotHome: string;
 }
 
+function telemetryHostname(endpoint: URL): string {
+  return endpoint.hostname.replace(/^\[(.+)\]$/, '$1');
+}
+
+export function withValidatedLocalTelemetry(config: BridgeConfig): BridgeConfig {
+  const endpoint = validateLocalTelemetryEndpoint(config.otlpTracesEndpoint);
+  return {
+    ...config,
+    otlpTracesEndpoint: endpoint.toString(),
+    localTelemetry: {
+      endpoint,
+      hostname: telemetryHostname(endpoint)
+    }
+  };
+}
+
 export function loadConfig(): BridgeConfig {
   const dataDir = resolveDataDir();
   const consoleValue = process.env['COPILOT_TRACE_CONSOLE_MODE'] ?? 'pretty';
-  const otlpTracesEndpoint = validateLocalTelemetryEndpoint(
-    process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'http://127.0.0.1:27432/v1/traces'
-  );
-  const telemetryHostname = otlpTracesEndpoint.hostname.replace(/^\[(.+)\]$/, '$1');
   if (consoleValue !== 'json' && consoleValue !== 'pretty' && consoleValue !== 'silent') {
     throw new Error(`COPILOT_TRACE_CONSOLE_MODE must be json, pretty, or silent; received ${consoleValue}`);
   }
@@ -72,11 +84,8 @@ export function loadConfig(): BridgeConfig {
     openSpanTimeoutMs: intFromEnv('COPILOT_TRACE_OPEN_SPAN_TIMEOUT_MS', 1_800_000),
     spoolDrainIntervalMs: intFromEnv('COPILOT_TRACE_SPOOL_DRAIN_INTERVAL_MS', 2_000),
     consoleMode: consoleValue,
-    otlpTracesEndpoint: otlpTracesEndpoint.toString(),
-    localTelemetry: {
-      endpoint: otlpTracesEndpoint,
-      hostname: telemetryHostname
-    },
+    otlpTracesEndpoint:
+      process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'http://127.0.0.1:27432/v1/traces',
     serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge',
     dedupeWindowMs: intFromEnv('COPILOT_TRACE_DEDUPE_WINDOW_MS', 10_000),
     copilotHome: process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot')

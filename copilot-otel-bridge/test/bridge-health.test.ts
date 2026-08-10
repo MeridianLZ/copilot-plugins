@@ -84,6 +84,7 @@ test('bridge health returns only the local runtime contract', async () => {
   try {
     const health = await readHealth(port);
     assert.deepEqual(health, {
+      ok: true,
       local_runtime: true,
       proxy_mode: 'disabled',
       telemetry_host: '127.0.0.1'

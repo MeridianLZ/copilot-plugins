@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from './config.js';
+import { loadConfig, withValidatedLocalTelemetry } from './config.js';
 import { createEnvelope } from './envelope.js';
 import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
@@ -80,7 +80,7 @@ function prettyConsole(envelope: HookEnvelope): void {
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = withValidatedLocalTelemetry(loadConfig());
   const localTelemetry = config.localTelemetry;
   if (!localTelemetry) {
     throw new Error('local telemetry runtime configuration missing');
@@ -167,6 +167,7 @@ async function main(): Promise<void> {
       const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, {
+          ok: true,
           local_runtime: true,
           proxy_mode: 'disabled',
           telemetry_host: localTelemetry.hostname
