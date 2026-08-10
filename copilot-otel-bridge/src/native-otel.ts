@@ -789,16 +789,24 @@ function compareRecords(left: NativeOtelRecord, right: NativeOtelRecord): number
 
 export class NativeOtelCache {
   readonly #entries = new Map<string, CacheEntry>();
+  #refreshTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly directory: string, private readonly maxRecords: number) {}
 
-  async getRecords(): Promise<NativeOtelRecord[]> {
+  getRecords(): Promise<NativeOtelRecord[]> {
+    const refresh = this.#refreshTail.then(() => this.#refreshRecords());
+    this.#refreshTail = refresh.then(() => undefined, () => undefined);
+    return refresh;
+  }
+
+  async #refreshRecords(): Promise<NativeOtelRecord[]> {
     const now = Date.now();
     const seen = new Set<string>();
     let files: string[] = [];
     try {
-      files = (await readdir(this.directory))
-        .filter((entry) => entry.toLowerCase().endsWith('.jsonl'))
+      files = (await readdir(this.directory, { withFileTypes: true }))
+        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.jsonl'))
+        .map((entry) => entry.name)
         .sort((left, right) => left.localeCompare(right));
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

@@ -145,6 +145,29 @@ test('NativeOtelCache incrementally appends new lines', async () => {
   });
 });
 
+test('NativeOtelCache serializes concurrent refreshes', async () => {
+  await withRuntimeDirectory(async (directory) => {
+    const filePath = path.join(directory, 'native-otel-logs.jsonl');
+    const totalLines = 3_000;
+    const lines = Array.from({ length: totalLines }, (_value, index) =>
+      makeCacheLine(`session-concurrent-${index}`, 1_723_298_415_000 + index, `c${index}`)
+    );
+    await writeFile(filePath, `${lines.join('\n')}\n`, 'utf8');
+
+    const cache = new NativeOtelCache(directory, totalLines + 100);
+    await Promise.all(Array.from({ length: 20 }, () => cache.getRecords()));
+    let records = await cache.getRecords();
+    let polls = 0;
+    while (records.length < totalLines && polls < 20) {
+      records = await cache.getRecords();
+      polls += 1;
+    }
+
+    assert.equal(records.length, totalLines);
+    assert.equal(new Set(records.map((record) => record.record_id)).size, totalLines);
+  });
+});
+
 test('NativeOtelCache buffers partial final lines until newline arrives', async () => {
   await withRuntimeDirectory(async (directory) => {
     const filePath = path.join(directory, 'native-otel-logs.jsonl');

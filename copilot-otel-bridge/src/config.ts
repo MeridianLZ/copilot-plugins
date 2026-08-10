@@ -32,6 +32,8 @@ export interface BridgeConfig {
   dataDir: string;
   eventsFile: string;
   spoolDir: string;
+  nativeOtelDirectory: string;
+  nativeOtelMaxRecords: number;
   contentMode: ContentMode;
   contentMaxBytes: number;
   postTimeoutMs: number;
@@ -78,6 +80,8 @@ export function loadConfig(): BridgeConfig {
     dataDir,
     eventsFile: path.join(dataDir, 'hook-events.jsonl'),
     spoolDir: path.join(dataDir, 'spool'),
+    nativeOtelDirectory: process.env['COPILOT_TRACE_NATIVE_OTEL_DIR'] ?? path.join(dataDir, 'native-otel'),
+    nativeOtelMaxRecords: intFromEnv('COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS', 100_000),
     contentMode: contentModeFromEnv(),
     contentMaxBytes: intFromEnv('COPILOT_TRACE_CONTENT_MAX_BYTES', 32_768),
     postTimeoutMs: intFromEnv('COPILOT_TRACE_POST_TIMEOUT_MS', 250),
