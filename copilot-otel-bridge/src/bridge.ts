@@ -11,7 +11,10 @@ import { conversationToMarkdown, projectConversation } from './conversation-proj
 import { createPayloadDeduper } from './dedupe.js';
 import { NativeSessionCache } from './native-cache.js';
 import { NativeOtelCache } from './native-otel.js';
+import type { NativeEvent } from './native-session.js';
 import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
+import { correlateSources, type CoverageEntry } from './correlation.js';
+import { buildSourceRecords, summarizeCoverage, type CoverageTotals } from './coverage.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
 function uiIndexPath(): string {
@@ -151,6 +154,32 @@ async function main(): Promise<void> {
     }
   };
 
+  const buildSessionCoverage = async (
+    sessionId: string,
+    ledger: readonly HookEnvelope[],
+    providedNativeEvents?: readonly NativeEvent[]
+  ): Promise<{
+    known: boolean;
+    entries: CoverageEntry[];
+    totals: CoverageTotals;
+    nativeEvents: readonly NativeEvent[];
+  }> => {
+    const trace = projectSessionTrace(ledger, sessionId);
+    const nativeEvents = providedNativeEvents ?? await nativeCache.getNativeEvents(sessionId);
+    const nativeOtelRecords = (await nativeOtelCache.getRecords()).filter((record) => record.session_id === sessionId);
+    const records = buildSourceRecords({
+      sessionId,
+      hooks: trace.events,
+      nativeEvents,
+      nativeOtelRecords,
+      spans: trace.spans
+    });
+    const entries = correlateSources(records);
+    const totals = summarizeCoverage(entries);
+    const known = trace.events.length > 0 || nativeEvents.length > 0 || nativeOtelRecords.length > 0;
+    return { known, entries, totals, nativeEvents };
+  };
+
   const initialDrained = await replaySpool();
   if (initialDrained > 0) process.stdout.write(`[bridge] replayed ${initialDrained} spooled hook events\n`);
 
@@ -199,7 +228,8 @@ async function main(): Promise<void> {
         const remainder = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
         const nativeOtelMatch = /^(.*)\/native-otel$/.exec(remainder);
         const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
-        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? remainder;
+        const coverageMatch = /^(.*)\/coverage$/.exec(remainder);
+        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? remainder;
         const ledger = await readLedger(config.eventsFile);
         if (nativeOtelMatch) {
           const records = (await nativeOtelCache.getRecords())
@@ -219,13 +249,27 @@ async function main(): Promise<void> {
           });
           return;
         }
-        if (conversationMatch) {
-          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
-          const conversation = projectConversation(ledger, sessionId, nativeEvents);
-          if (conversation.event_count === 0) {
+        if (coverageMatch) {
+          const coverage = await buildSessionCoverage(sessionId, ledger);
+          if (!coverage.known) {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;
           }
+          sendJson(response, 200, {
+            entries: coverage.entries,
+            totals: coverage.totals,
+            generated_at: new Date().toISOString()
+          });
+          return;
+        }
+        if (conversationMatch) {
+          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
+          const coverage = await buildSessionCoverage(sessionId, ledger, nativeEvents);
+          if (!coverage.known) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const conversation = projectConversation(ledger, sessionId, coverage.nativeEvents, coverage.entries);
           const format = conversationMatch[2] ?? url.searchParams.get('format') ?? 'json';
           if (format === 'md' || format === 'markdown') {
             const markdown = conversationToMarkdown(conversation);
