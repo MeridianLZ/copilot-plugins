@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
 import { open, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { sanitizeSecrets } from './security.js';
+import { createRedactionDispositionAccumulator, sanitizeNativeOtelValue } from './security.js';
 import type {
   JsonValue,
   NativeOtelRecord,
   NativeSignal,
-  RedactionDisposition,
-  RedactionKind
+  RedactionDisposition
 } from './types.js';
 
 interface CandidateRecord {
@@ -23,13 +22,6 @@ interface CandidateRecord {
   parentSpanId: string | undefined;
 }
 
-interface RedactionAccumulator {
-  redacted: boolean;
-  policyVersion: string;
-  kinds: Set<RedactionKind>;
-  bytes: number;
-}
-
 interface CacheEntry {
   byteOffset: number;
   lineOffset: number;
@@ -39,7 +31,6 @@ interface CacheEntry {
 }
 
 const IDLE_EVICT_MS = 10 * 60 * 1000;
-const REDACTION_KIND_ORDER: readonly RedactionKind[] = ['raw', 'base64', 'url_encoded', 'proxy_uri', 'secret_pattern'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -493,66 +484,14 @@ function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown
   };
 }
 
-function createAccumulator(): RedactionAccumulator {
-  const baseline = sanitizeSecrets('');
-  return {
-    redacted: false,
-    policyVersion: baseline.disposition.policy_version,
-    kinds: new Set<RedactionKind>(),
-    bytes: 0
-  };
-}
-
-function shouldForceCiphertextRedaction(keyPath: string): boolean {
-  const normalized = normalizeFieldName(keyPath);
-  if (!normalized.includes('reasoning')) return false;
-  return normalized.includes('opaque') || normalized.includes('cipher') || normalized.includes('encrypt');
-}
-
-function sanitizeValue(value: JsonValue, keyPath: string, accumulator: RedactionAccumulator): JsonValue {
-  if (typeof value === 'string') {
-    if (shouldForceCiphertextRedaction(keyPath)) {
-      accumulator.redacted = true;
-      accumulator.kinds.add('secret_pattern');
-      accumulator.bytes += Buffer.byteLength(value, 'utf8');
-      return '[REDACTED_reasoning_ciphertext]';
-    }
-    const sanitized = sanitizeSecrets(value);
-    accumulator.bytes += sanitized.disposition.bytes;
-    if (sanitized.disposition.redacted) accumulator.redacted = true;
-    for (const kind of sanitized.disposition.kinds) accumulator.kinds.add(kind);
-    return sanitized.text;
-  }
-  if (Array.isArray(value)) {
-    return value.map((entry, index) => sanitizeValue(entry, `${keyPath}_${index}`, accumulator));
-  }
-  if (value === null || typeof value !== 'object') return value;
-  const output: Record<string, JsonValue> = {};
-  for (const [key, child] of Object.entries(value)) {
-    output[key] = sanitizeValue(child, `${keyPath}.${key}`, accumulator);
-  }
-  return output;
-}
-
-function sanitizeMap(
+function sanitizeRecordMap(
   input: Record<string, JsonValue>,
-  prefix: string,
-  accumulator: RedactionAccumulator
+  keyPath: string,
+  disposition: RedactionDisposition
 ): Record<string, JsonValue> {
-  const output: Record<string, JsonValue> = {};
-  for (const [key, value] of Object.entries(input)) {
-    output[key] = sanitizeValue(value, `${prefix}.${key}`, accumulator);
-  }
-  return output;
-}
-
-function finalizeDisposition(accumulator: RedactionAccumulator): RedactionDisposition {
-  return {
-    redacted: accumulator.redacted,
-    policy_version: accumulator.policyVersion,
-    kinds: REDACTION_KIND_ORDER.filter((kind) => accumulator.kinds.has(kind)),
-    bytes: accumulator.bytes
-  };
+  const sanitized = sanitizeNativeOtelValue(keyPath, input, disposition);
+  if (isRecord(sanitized)) return sanitized as Record<string, JsonValue>;
+  return {};
 }
 
 function usageKeyFromNormalized(normalized: string): string | undefined {
@@ -621,7 +560,7 @@ function invalidRecord(
   signal: NativeSignal,
   sourceHash: string
 ): NativeOtelRecord {
-  const disposition = finalizeDisposition(createAccumulator());
+  const disposition = createRedactionDispositionAccumulator();
   return {
     record_id: recordId(sourceFile, lineNumber, signal, sourceHash, 0, 'invalid'),
     source_file: sourceFile,
@@ -632,6 +571,39 @@ function invalidRecord(
     resource: {},
     instrumentation_scope: {},
     content_disposition: disposition,
+    validity: 'invalid',
+    source_hash: sourceHash
+  };
+}
+
+function truncationResetRecord(
+  sourceFile: string,
+  previousByteOffset: number,
+  previousLineNumber: number,
+  previousRemainder: string,
+  newByteSize: number
+): NativeOtelRecord {
+  const signal = inferSignalFromSourceFile(sourceFile);
+  const contextLine = Math.max(1, previousLineNumber + (previousRemainder.length > 0 ? 1 : 0));
+  const sourceHash = createHash('sha256')
+    .update(`truncated:${sourceFile}:${previousByteOffset}:${previousLineNumber}:${newByteSize}`)
+    .digest('hex');
+  return {
+    record_id: recordId(sourceFile, contextLine, signal, sourceHash, 0, 'invalid'),
+    source_file: sourceFile,
+    line_number: contextLine,
+    signal,
+    observed_at_unix_ms: 0,
+    attributes: {
+      reason: 'source_truncated_reset',
+      previous_byte_offset: previousByteOffset,
+      previous_line_number: previousLineNumber,
+      new_byte_size: newByteSize,
+      had_partial_line: previousRemainder.length > 0
+    },
+    resource: {},
+    instrumentation_scope: {},
+    content_disposition: createRedactionDispositionAccumulator(),
     validity: 'invalid',
     source_hash: sourceHash
   };
@@ -657,10 +629,10 @@ function normalizeCandidate(
   sourceHash: string,
   ordinal: number
 ): NativeOtelRecord {
-  const accumulator = createAccumulator();
-  const attributes = sanitizeMap(candidate.attributes, 'attributes', accumulator);
-  const resource = sanitizeMap(candidate.resource, 'resource', accumulator);
-  const instrumentationScope = sanitizeMap(candidate.instrumentationScope, 'instrumentation_scope', accumulator);
+  const disposition = createRedactionDispositionAccumulator();
+  const attributes = sanitizeRecordMap(candidate.attributes, 'attributes', disposition);
+  const resource = sanitizeRecordMap(candidate.resource, 'resource', disposition);
+  const instrumentationScope = sanitizeRecordMap(candidate.instrumentationScope, 'instrumentation_scope', disposition);
   const lookup = buildLookup(attributes, resource, instrumentationScope, candidate.line, candidate.entity);
   const usage = extractUsage(lookup, candidate.line, candidate.entity);
 
@@ -713,7 +685,7 @@ function normalizeCandidate(
     attributes,
     resource,
     instrumentation_scope: instrumentationScope,
-    content_disposition: finalizeDisposition(accumulator),
+    content_disposition: disposition,
     validity: 'valid',
     source_hash: sourceHash
   };
@@ -816,10 +788,17 @@ export class NativeOtelCache {
     try {
       const metadata = await stat(filePath);
       if (metadata.size < entry.byteOffset) {
+        const resetRecord = truncationResetRecord(
+          filePath,
+          entry.byteOffset,
+          entry.lineOffset,
+          entry.remainder,
+          metadata.size
+        );
         entry.byteOffset = 0;
         entry.lineOffset = 0;
         entry.remainder = '';
-        entry.records = [];
+        entry.records = [resetRecord];
       }
       if (metadata.size <= entry.byteOffset) return;
 

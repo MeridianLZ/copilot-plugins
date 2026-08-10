@@ -405,6 +405,76 @@ export function redactSecrets(input: string): string {
   return sanitizeSecrets(input).text;
 }
 
+function normalizeRedactionKey(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+}
+
+export function isOpaqueReasoningKey(keyPath: string): boolean {
+  const normalized = normalizeRedactionKey(keyPath);
+  if (!normalized.includes('reasoning')) return false;
+  return normalized.includes('opaque') || normalized.includes('cipher') || normalized.includes('encrypt');
+}
+
+function mergeDispositionKinds(target: RedactionDisposition, additions: readonly RedactionKind[]): void {
+  if (additions.length === 0) return;
+  const kinds = new Set<RedactionKind>(target.kinds);
+  for (const kind of additions) kinds.add(kind);
+  target.kinds = REDACTION_KIND_ORDER.filter((kind) => kinds.has(kind));
+}
+
+function mergeDisposition(target: RedactionDisposition, incoming: RedactionDisposition): void {
+  if (incoming.redacted) target.redacted = true;
+  target.bytes += incoming.bytes;
+  if (!target.policy_version) target.policy_version = incoming.policy_version;
+  mergeDispositionKinds(target, incoming.kinds);
+}
+
+export function createRedactionDispositionAccumulator(): RedactionDisposition {
+  return {
+    redacted: false,
+    policy_version: REDACTION_POLICY_VERSION,
+    kinds: [],
+    bytes: 0
+  };
+}
+
+export function sanitizeNativeOtelValue(
+  keyPath: string,
+  value: JsonValue,
+  disposition: RedactionDisposition = createRedactionDispositionAccumulator()
+): JsonValue {
+  if (typeof value === 'string') {
+    if (isOpaqueReasoningKey(keyPath)) {
+      const incoming: RedactionDisposition = {
+        redacted: true,
+        policy_version: REDACTION_POLICY_VERSION,
+        kinds: ['secret_pattern'],
+        bytes: utf8Bytes(value)
+      };
+      mergeDisposition(disposition, incoming);
+      return '[REDACTED_reasoning_ciphertext]';
+    }
+    const sanitized = sanitizeSecrets(value);
+    mergeDisposition(disposition, sanitized.disposition);
+    return sanitized.text;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => sanitizeNativeOtelValue(`${keyPath}[${index}]`, entry, disposition));
+  }
+
+  if (value === null || typeof value !== 'object') return value;
+  const output: JsonObject = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    output[childKey] = sanitizeNativeOtelValue(`${keyPath}.${childKey}`, childValue, disposition);
+  }
+  return output;
+}
+
 export function stableJson(value: JsonValue): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -436,7 +506,10 @@ function contentSummary(value: JsonValue): JsonObject {
 function sanitizeContent(value: JsonValue, mode: ContentMode, maxBytes: number): JsonValue {
   if (mode === 'off') return { redacted: true };
   if (mode === 'hash') return contentSummary(value);
-  if (typeof value === 'string') return truncateUtf8(sanitizeSecrets(value).text, maxBytes);
+  if (typeof value === 'string') {
+    const sanitized = sanitizeNativeOtelValue('content', value);
+    return truncateUtf8(typeof sanitized === 'string' ? sanitized : stableJson(sanitized), maxBytes);
+  }
   const serialized = truncateUtf8(sanitizeSecrets(stableJson(value)).text, maxBytes);
   try {
     return JSON.parse(serialized) as JsonValue;
@@ -447,7 +520,10 @@ function sanitizeContent(value: JsonValue, mode: ContentMode, maxBytes: number):
 
 export function sanitizeJson(value: JsonValue, mode: ContentMode, maxBytes: number, key = ''): JsonValue {
   if (CONTENT_KEYS.has(key)) return sanitizeContent(value, mode, maxBytes);
-  if (typeof value === 'string') return truncateUtf8(redactSecrets(value), maxBytes);
+  if (typeof value === 'string') {
+    const sanitized = sanitizeNativeOtelValue(key, value);
+    return truncateUtf8(typeof sanitized === 'string' ? sanitized : stableJson(sanitized), maxBytes);
+  }
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.slice(0, 256).map((entry) => sanitizeJson(entry, mode, maxBytes));
 

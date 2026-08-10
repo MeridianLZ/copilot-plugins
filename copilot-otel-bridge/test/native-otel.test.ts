@@ -4,6 +4,8 @@ import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { NativeOtelCache, parseNativeOtelLines } from '../src/native-otel.js';
+import { sanitizeNativeOtelValue } from '../src/security.js';
+import type { RedactionDisposition } from '../src/types.js';
 
 const FIXTURES_DIR = path.join(process.cwd(), 'test', 'fixtures');
 const RUNTIME_ROOT = path.join(FIXTURES_DIR, '.native-otel-runtime');
@@ -114,6 +116,15 @@ test('parseNativeOtelLines emits invalid records for malformed json lines', () =
   assert.equal(records[1]?.session_id, 'session-good');
 });
 
+test('sanitizeNativeOtelValue applies shared opaque-reasoning redaction policy', () => {
+  const disposition: RedactionDisposition = { redacted: false, policy_version: '', kinds: [], bytes: 0 };
+  const sanitized = sanitizeNativeOtelValue('reasoning_ciphertext', 'opaque-ciphertext-value', disposition);
+  assert.equal(sanitized, '[REDACTED_reasoning_ciphertext]');
+  assert.equal(disposition.redacted, true);
+  assert.equal(disposition.kinds.includes('secret_pattern'), true);
+  assert.equal(disposition.bytes > 0, true);
+});
+
 test('NativeOtelCache incrementally appends new lines', async () => {
   await withRuntimeDirectory(async (directory) => {
     const filePath = path.join(directory, 'native-otel-logs.jsonl');
@@ -168,9 +179,13 @@ test('NativeOtelCache restarts a file when truncation occurs', async () => {
     await writeFile(filePath, `${afterLine}\n`, 'utf8');
 
     const after = await cache.getRecords();
-    assert.equal(after.length, 1);
-    assert.equal(after[0]?.session_id, 'session-reset-new');
-    assert.equal(after[0]?.line_number, 1);
+    assert.equal(after.length, 2);
+    assert.equal(after[0]?.validity, 'invalid');
+    assert.equal(after[0]?.attributes['reason'], 'source_truncated_reset');
+    assert.equal(after[0]?.attributes['previous_byte_offset'], Buffer.byteLength(`${beforeA}\n${beforeB}\n`, 'utf8'));
+    assert.equal(after[0]?.attributes['previous_line_number'], 2);
+    assert.equal(after[1]?.session_id, 'session-reset-new');
+    assert.equal(after[1]?.line_number, 1);
   });
 });
 
