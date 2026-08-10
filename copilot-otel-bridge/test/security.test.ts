@@ -81,3 +81,24 @@ test('findSecretMatches reports encoding classes without exposing secret values'
   assert.equal(serializedMatches.includes(canaryBase64), false);
   assert.equal(serializedMatches.includes(canaryUrlEncoded), false);
 });
+
+test('sanitizeSecrets keeps key prefix when redacting generic key-value secrets', () => {
+  const sanitized = sanitizeSecrets('password: supersecret token=evenmoresecret');
+
+  assert.equal(sanitized.includes('$1'), false);
+  assert.equal(sanitized.includes('password: [REDACTED]'), true);
+  assert.equal(sanitized.includes('token=[REDACTED]'), true);
+});
+
+test('sanitizeSecrets handles large ASCII input without percent triplets', { timeout: 1_500 }, () => {
+  const input = `prefix ${'a'.repeat(150_000)} suffix`;
+  const sanitized = sanitizeSecrets(input);
+
+  assert.equal(sanitized.text, input);
+  assert.deepEqual(sanitized.disposition, {
+    redacted: false,
+    policy_version: 'otel-redaction-policy-v1',
+    kinds: [],
+    bytes: Buffer.byteLength(input, 'utf8')
+  });
+});

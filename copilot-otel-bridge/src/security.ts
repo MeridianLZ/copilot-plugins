@@ -34,7 +34,8 @@ const AUTHENTICATED_PROXY_URI_PATTERN =
   /\bhttps?:\/\/(?:[^@\s/:]+(?::[^@\s/]*)?)@[^/\s?#:]+(?::\d{1,5})?(?:[/?#][^\s]*)?/gi;
 const PROXY_ASSIGNMENT_PATTERN = /\b(?:HTTP|HTTPS)_PROXY\s*=\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s\r\n;]+)/gi;
 const BASE64_CANDIDATE_PATTERN = /\b[A-Za-z0-9+/]{16,}={0,2}\b/g;
-const URL_ENCODED_CANDIDATE_PATTERN = /[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*%[0-9A-Fa-f]{2}[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*/g;
+const MAX_URL_ENCODED_CANDIDATE_LENGTH = 8_192;
+const URL_ENCODED_SIDE_WINDOW = Math.floor((MAX_URL_ENCODED_CANDIDATE_LENGTH - 3) / 2);
 const REDACTION_KIND_ORDER: readonly RedactionKind[] = ['raw', 'base64', 'url_encoded', 'proxy_uri', 'secret_pattern'];
 
 type SecretPattern = { pattern: RegExp; replacement: string };
@@ -93,12 +94,117 @@ function decodeBase64Candidate(value: string): string | undefined {
 }
 
 function decodeUrlEncodedCandidate(value: string): string | undefined {
-  if (!/%[0-9A-Fa-f]{2}/.test(value) || value.length > 8_192) return undefined;
+  if (!/%[0-9A-Fa-f]{2}/.test(value) || value.length > MAX_URL_ENCODED_CANDIDATE_LENGTH) return undefined;
   try {
     return decodeURIComponent(value);
   } catch {
     return undefined;
   }
+}
+
+function isHexDigitCode(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 70) ||
+    (code >= 97 && code <= 102)
+  );
+}
+
+function isUrlEncodedCandidateCode(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    code === 46 ||
+    code === 95 ||
+    code === 126 ||
+    code === 58 ||
+    code === 47 ||
+    code === 63 ||
+    code === 35 ||
+    code === 91 ||
+    code === 93 ||
+    code === 64 ||
+    code === 33 ||
+    code === 36 ||
+    code === 38 ||
+    code === 39 ||
+    code === 40 ||
+    code === 41 ||
+    code === 42 ||
+    code === 43 ||
+    code === 44 ||
+    code === 59 ||
+    code === 61 ||
+    code === 37 ||
+    code === 45
+  );
+}
+
+function isPercentHexTriplet(value: string, index: number): boolean {
+  return (
+    value[index] === '%' &&
+    index + 2 < value.length &&
+    isHexDigitCode(value.charCodeAt(index + 1)) &&
+    isHexDigitCode(value.charCodeAt(index + 2))
+  );
+}
+
+function collectUrlEncodedCandidateRanges(input: string): { start: number; end: number }[] {
+  const ranges: { start: number; end: number }[] = [];
+  let searchIndex = 0;
+  while (searchIndex < input.length) {
+    const percentIndex = input.indexOf('%', searchIndex);
+    if (percentIndex === -1) break;
+    if (!isPercentHexTriplet(input, percentIndex)) {
+      searchIndex = percentIndex + 1;
+      continue;
+    }
+
+    let start = percentIndex;
+    let leftConsumed = 0;
+    while (
+      start > 0 &&
+      leftConsumed < URL_ENCODED_SIDE_WINDOW &&
+      isUrlEncodedCandidateCode(input.charCodeAt(start - 1))
+    ) {
+      start--;
+      leftConsumed++;
+    }
+
+    let end = percentIndex + 3;
+    let rightConsumed = 0;
+    while (
+      end < input.length &&
+      rightConsumed < URL_ENCODED_SIDE_WINDOW &&
+      isUrlEncodedCandidateCode(input.charCodeAt(end))
+    ) {
+      end++;
+      rightConsumed++;
+    }
+
+    const previous = ranges[ranges.length - 1];
+    if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
+    else ranges.push({ start, end });
+
+    searchIndex = percentIndex + 3;
+  }
+  return ranges;
+}
+
+function resolveReplacementTemplate(template: string, match: RegExpExecArray): string {
+  if (!template.includes('$')) return template;
+  const matchedText = match[0] ?? '';
+  const sourceText = match.input ?? '';
+  const matchIndex = match.index ?? 0;
+  return template.replace(/\$(\$|&|`|'|[1-9]\d?)/g, (_token, group: string) => {
+    if (group === '$') return '$';
+    if (group === '&') return matchedText;
+    if (group === '`') return sourceText.slice(0, matchIndex);
+    if (group === "'") return sourceText.slice(matchIndex + matchedText.length);
+    const captureIndex = Number.parseInt(group, 10);
+    return match[captureIndex] ?? '';
+  });
 }
 
 function addMatchesForPattern(
@@ -115,7 +221,15 @@ function addMatchesForPattern(
   while (match) {
     const start = match.index;
     const end = start + match[0].length;
-    if (end > start && !overlapsAny(start, end, skipRanges)) output.push({ kind, start, end, replacement, priority });
+    if (end > start && !overlapsAny(start, end, skipRanges)) {
+      output.push({
+        kind,
+        start,
+        end,
+        replacement: resolveReplacementTemplate(replacement, match),
+        priority
+      });
+    }
     if (match[0].length === 0) pattern.lastIndex++;
     match = pattern.exec(input);
   }
@@ -205,21 +319,19 @@ function collectSecretMatches(input: string): SecretMatchCandidate[] {
     base64Match = BASE64_CANDIDATE_PATTERN.exec(input);
   }
 
-  URL_ENCODED_CANDIDATE_PATTERN.lastIndex = 0;
-  let encodedMatch: RegExpExecArray | null = URL_ENCODED_CANDIDATE_PATTERN.exec(input);
-  while (encodedMatch) {
-    const decoded = decodeUrlEncodedCandidate(encodedMatch[0]);
+  const encodedRanges = collectUrlEncodedCandidateRanges(input);
+  for (const range of encodedRanges) {
+    const encodedValue = input.slice(range.start, range.end);
+    const decoded = decodeUrlEncodedCandidate(encodedValue);
     if (decoded && isAuthenticatedProxyUri(decoded)) {
       candidates.push({
         kind: 'url_encoded',
-        start: encodedMatch.index,
-        end: encodedMatch.index + encodedMatch[0].length,
+        start: range.start,
+        end: range.end,
         replacement: '[REDACTED_url_encoded]',
         priority: 60
       });
     }
-    if (encodedMatch[0].length === 0) URL_ENCODED_CANDIDATE_PATTERN.lastIndex++;
-    encodedMatch = URL_ENCODED_CANDIDATE_PATTERN.exec(input);
   }
 
   return normalizeMatches(candidates);
