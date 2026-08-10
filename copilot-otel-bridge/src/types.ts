@@ -21,6 +21,20 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 export type ContentMode = 'off' | 'hash' | 'full';
+export type RedactionKind = 'raw' | 'base64' | 'url_encoded' | 'proxy_uri' | 'secret_pattern';
+
+export interface SecretMatch {
+  kind: RedactionKind;
+  start: number;
+  end: number;
+}
+
+export interface RedactionDisposition {
+  redacted: boolean;
+  policy_version: string;
+  kinds: RedactionKind[];
+  bytes: number;
+}
 
 export interface NormalizedHookPayload extends JsonObject {
   hook_event_name: CopilotHookEventName;

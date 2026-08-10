@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { AttributeValue } from '@opentelemetry/api';
-import type { ContentMode, JsonObject, JsonValue } from './types.js';
+import type {
+  ContentMode,
+  JsonObject,
+  JsonValue,
+  RedactionDisposition,
+  RedactionKind,
+  SecretMatch
+} from './types.js';
 
 const CONTENT_KEYS = new Set([
   'prompt',
@@ -22,7 +29,26 @@ const CONTENT_KEYS = new Set([
   'url'
 ]);
 
-const SECRET_PATTERNS: readonly { pattern: RegExp; replacement: string }[] = [
+const REDACTION_POLICY_VERSION = 'otel-redaction-policy-v1';
+const AUTHENTICATED_PROXY_URI_PATTERN =
+  /\bhttps?:\/\/(?:[^@\s/:]+(?::[^@\s/]*)?)@[^/\s?#:]+(?::\d{1,5})?(?:[/?#][^\s]*)?/gi;
+const PROXY_ASSIGNMENT_PATTERN = /\b(?:HTTP|HTTPS)_PROXY\s*=\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s\r\n;]+)/gi;
+const BASE64_CANDIDATE_PATTERN = /\b[A-Za-z0-9+/]{16,}={0,2}\b/g;
+const URL_ENCODED_CANDIDATE_PATTERN = /[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*%[0-9A-Fa-f]{2}[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*/g;
+const REDACTION_KIND_ORDER: readonly RedactionKind[] = ['raw', 'base64', 'url_encoded', 'proxy_uri', 'secret_pattern'];
+
+type SecretPattern = { pattern: RegExp; replacement: string };
+type SecretMatchCandidate = SecretMatch & { replacement: string; priority: number };
+type SanitizedSecretsResult = {
+  text: string;
+  disposition: RedactionDisposition;
+  includes: (search: string, position?: number) => boolean;
+  toString: () => string;
+  valueOf: () => string;
+  [Symbol.toPrimitive]: () => string;
+};
+
+const SECRET_PATTERNS: readonly SecretPattern[] = [
   { pattern: /\bghp_[A-Za-z0-9]{20,}\b/g, replacement: '[REDACTED_GITHUB_TOKEN]' },
   { pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, replacement: '[REDACTED_GITHUB_TOKEN]' },
   { pattern: /\bsk-ant-[A-Za-z0-9_-]{16,}\b/g, replacement: '[REDACTED_ANTHROPIC_KEY]' },
@@ -35,8 +61,213 @@ const SECRET_PATTERNS: readonly { pattern: RegExp; replacement: string }[] = [
   }
 ];
 
+function overlaps(start: number, end: number, otherStart: number, otherEnd: number): boolean {
+  return start < otherEnd && otherStart < end;
+}
+
+function overlapsAny(start: number, end: number, ranges: readonly { start: number; end: number }[]): boolean {
+  return ranges.some((range) => overlaps(start, end, range.start, range.end));
+}
+
+function isAuthenticatedProxyUri(value: string): boolean {
+  return /https?:\/\/(?:[^@\s/:]+(?::[^@\s/]*)?)@[^/\s?#:]+/i.test(value);
+}
+
+function decodeBase64Candidate(value: string): string | undefined {
+  if (value.length < 16 || value.length > 8_192) return undefined;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) return undefined;
+  const padLength = (4 - (normalized.length % 4)) % 4;
+  const padded = `${normalized}${'='.repeat(padLength)}`;
+  try {
+    const decodedBuffer = Buffer.from(padded, 'base64');
+    const decoded = decodedBuffer.toString('utf8');
+    if (decoded.length === 0) return undefined;
+    const normalizedInput = normalized.replace(/=+$/, '');
+    const normalizedDecoded = decodedBuffer.toString('base64').replace(/=+$/, '');
+    if (normalizedDecoded !== normalizedInput) return undefined;
+    return decoded;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeUrlEncodedCandidate(value: string): string | undefined {
+  if (!/%[0-9A-Fa-f]{2}/.test(value) || value.length > 8_192) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function addMatchesForPattern(
+  input: string,
+  pattern: RegExp,
+  kind: RedactionKind,
+  replacement: string,
+  priority: number,
+  output: SecretMatchCandidate[],
+  skipRanges: readonly { start: number; end: number }[] = []
+): void {
+  pattern.lastIndex = 0;
+  let match: RegExpExecArray | null = pattern.exec(input);
+  while (match) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (end > start && !overlapsAny(start, end, skipRanges)) output.push({ kind, start, end, replacement, priority });
+    if (match[0].length === 0) pattern.lastIndex++;
+    match = pattern.exec(input);
+  }
+}
+
+function normalizeMatches(matches: readonly SecretMatchCandidate[]): SecretMatchCandidate[] {
+  const sorted = [...matches].sort(
+    (left, right) =>
+      left.start - right.start ||
+      right.priority - left.priority ||
+      right.end - left.end ||
+      left.kind.localeCompare(right.kind)
+  );
+  const normalized: SecretMatchCandidate[] = [];
+  for (const candidate of sorted) {
+    const previous = normalized[normalized.length - 1];
+    if (!previous || candidate.start >= previous.end) {
+      normalized.push({ ...candidate });
+      continue;
+    }
+    const candidateWins =
+      candidate.priority > previous.priority ||
+      (candidate.priority === previous.priority && candidate.end - candidate.start > previous.end - previous.start);
+    if (candidateWins) {
+      previous.kind = candidate.kind;
+      previous.replacement = candidate.replacement;
+      previous.priority = candidate.priority;
+    }
+    previous.start = Math.min(previous.start, candidate.start);
+    previous.end = Math.max(previous.end, candidate.end);
+  }
+  return normalized.sort((left, right) => left.start - right.start || left.end - right.end);
+}
+
+function orderedKinds(matches: readonly SecretMatchCandidate[]): RedactionKind[] {
+  const kinds = new Set<RedactionKind>(matches.map((match) => match.kind));
+  return REDACTION_KIND_ORDER.filter((kind) => kinds.has(kind));
+}
+
+function collectSecretMatches(input: string): SecretMatchCandidate[] {
+  const candidates: SecretMatchCandidate[] = [];
+  for (const item of SECRET_PATTERNS) {
+    addMatchesForPattern(input, item.pattern, 'secret_pattern', item.replacement, 30, candidates);
+  }
+
+  const proxyRanges: { start: number; end: number }[] = [];
+  PROXY_ASSIGNMENT_PATTERN.lastIndex = 0;
+  let assignmentMatch: RegExpExecArray | null = PROXY_ASSIGNMENT_PATTERN.exec(input);
+  while (assignmentMatch) {
+    const assignment = assignmentMatch[0];
+    const equalsOffset = assignment.indexOf('=');
+    if (equalsOffset >= 0) {
+      let valueStart = assignmentMatch.index + equalsOffset + 1;
+      while (valueStart < input.length && /\s/.test(input[valueStart] ?? '')) valueStart++;
+      const valueEnd = assignmentMatch.index + assignment.length;
+      if (valueEnd > valueStart) {
+        proxyRanges.push({ start: valueStart, end: valueEnd });
+        candidates.push({
+          kind: 'proxy_uri',
+          start: valueStart,
+          end: valueEnd,
+          replacement: '[REDACTED_proxy_uri]',
+          priority: 90
+        });
+      }
+    }
+    if (assignmentMatch[0].length === 0) PROXY_ASSIGNMENT_PATTERN.lastIndex++;
+    assignmentMatch = PROXY_ASSIGNMENT_PATTERN.exec(input);
+  }
+
+  addMatchesForPattern(input, AUTHENTICATED_PROXY_URI_PATTERN, 'raw', '[REDACTED_raw]', 80, candidates, proxyRanges);
+
+  BASE64_CANDIDATE_PATTERN.lastIndex = 0;
+  let base64Match: RegExpExecArray | null = BASE64_CANDIDATE_PATTERN.exec(input);
+  while (base64Match) {
+    const decoded = decodeBase64Candidate(base64Match[0]);
+    if (decoded && isAuthenticatedProxyUri(decoded)) {
+      candidates.push({
+        kind: 'base64',
+        start: base64Match.index,
+        end: base64Match.index + base64Match[0].length,
+        replacement: '[REDACTED_base64]',
+        priority: 70
+      });
+    }
+    if (base64Match[0].length === 0) BASE64_CANDIDATE_PATTERN.lastIndex++;
+    base64Match = BASE64_CANDIDATE_PATTERN.exec(input);
+  }
+
+  URL_ENCODED_CANDIDATE_PATTERN.lastIndex = 0;
+  let encodedMatch: RegExpExecArray | null = URL_ENCODED_CANDIDATE_PATTERN.exec(input);
+  while (encodedMatch) {
+    const decoded = decodeUrlEncodedCandidate(encodedMatch[0]);
+    if (decoded && isAuthenticatedProxyUri(decoded)) {
+      candidates.push({
+        kind: 'url_encoded',
+        start: encodedMatch.index,
+        end: encodedMatch.index + encodedMatch[0].length,
+        replacement: '[REDACTED_url_encoded]',
+        priority: 60
+      });
+    }
+    if (encodedMatch[0].length === 0) URL_ENCODED_CANDIDATE_PATTERN.lastIndex++;
+    encodedMatch = URL_ENCODED_CANDIDATE_PATTERN.exec(input);
+  }
+
+  return normalizeMatches(candidates);
+}
+
+function createSanitizedSecretsResult(text: string, disposition: RedactionDisposition): SanitizedSecretsResult {
+  return {
+    text,
+    disposition,
+    includes: (search: string, position?: number) => text.includes(search, position),
+    toString: () => text,
+    valueOf: () => text,
+    [Symbol.toPrimitive]: () => text
+  };
+}
+
+export function findSecretMatches(input: string): SecretMatch[] {
+  return collectSecretMatches(input).map((match) => ({ kind: match.kind, start: match.start, end: match.end }));
+}
+
+export function sanitizeSecrets(input: string): SanitizedSecretsResult {
+  const matches = collectSecretMatches(input);
+  if (matches.length === 0) {
+    return createSanitizedSecretsResult(input, {
+      redacted: false,
+      policy_version: REDACTION_POLICY_VERSION,
+      kinds: [],
+      bytes: utf8Bytes(input)
+    });
+  }
+
+  let text = input;
+  for (let index = matches.length - 1; index >= 0; index--) {
+    const match = matches[index];
+    if (!match) continue;
+    text = `${text.slice(0, match.start)}${match.replacement}${text.slice(match.end)}`;
+  }
+
+  return createSanitizedSecretsResult(text, {
+    redacted: true,
+    policy_version: REDACTION_POLICY_VERSION,
+    kinds: orderedKinds(matches),
+    bytes: utf8Bytes(input)
+  });
+}
+
 export function redactSecrets(input: string): string {
-  return SECRET_PATTERNS.reduce((current, item) => current.replace(item.pattern, item.replacement), input);
+  return sanitizeSecrets(input).text;
 }
 
 export function stableJson(value: JsonValue): string {
@@ -70,8 +301,8 @@ function contentSummary(value: JsonValue): JsonObject {
 function sanitizeContent(value: JsonValue, mode: ContentMode, maxBytes: number): JsonValue {
   if (mode === 'off') return { redacted: true };
   if (mode === 'hash') return contentSummary(value);
-  if (typeof value === 'string') return truncateUtf8(redactSecrets(value), maxBytes);
-  const serialized = truncateUtf8(redactSecrets(stableJson(value)), maxBytes);
+  if (typeof value === 'string') return truncateUtf8(sanitizeSecrets(value).text, maxBytes);
+  const serialized = truncateUtf8(sanitizeSecrets(stableJson(value)).text, maxBytes);
   try {
     return JSON.parse(serialized) as JsonValue;
   } catch {
