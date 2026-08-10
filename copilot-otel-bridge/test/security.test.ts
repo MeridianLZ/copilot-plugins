@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sanitizeJson, stableJson } from '../src/security.js';
+import { findSecretMatches, sanitizeJson, sanitizeSecrets, stableJson } from '../src/security.js';
 import { isJsonObject, type JsonObject } from '../src/types.js';
+
+const canary = 'http://canary-user:canary-pass@proxy.invalid:8080';
+const canaryBase64 = Buffer.from(canary, 'utf8').toString('base64');
+const canaryUrlEncoded = encodeURIComponent(canary);
 
 test('stableJson sorts object keys recursively', () => {
   assert.equal(
@@ -46,7 +50,7 @@ test('tool identity remains structural while arguments and results are hashed', 
 
 test('full mode redacts common bearer and API key formats', () => {
   const sanitized = sanitizeJson(
-    { note: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz; key sk-ant-abcdefghijklmnopqrstuv' },
+    { note: 'Authorization: ******; key sk-ant-abcdefghijklmnopqrstuv' },
     'full',
     32_768
   );
@@ -54,4 +58,26 @@ test('full mode redacts common bearer and API key formats', () => {
   assert.equal(text.includes('abcdefghijklmnopqrstuvwxyz'), false);
   assert.equal(text.includes('sk-ant-abcdefghijklmnopqrstuv'), false);
   assert.match(text, /REDACTED/);
+});
+
+test('sanitizeSecrets removes raw, base64, and url-encoded credential forms', () => {
+  const input = `raw=${canary}\nbase64=${canaryBase64}\nurl=${canaryUrlEncoded}`;
+  const sanitized = sanitizeSecrets(input);
+
+  assert.equal(sanitized.includes(canary), false);
+  assert.equal(sanitized.includes(canaryBase64), false);
+  assert.equal(sanitized.includes(canaryUrlEncoded), false);
+});
+
+test('findSecretMatches reports encoding classes without exposing secret values', () => {
+  const input = `raw=${canary}\nbase64=${canaryBase64}\nurl=${canaryUrlEncoded}`;
+  const matches = findSecretMatches(input);
+  const serializedMatches = JSON.stringify(matches);
+
+  assert.match(serializedMatches, /raw/i);
+  assert.match(serializedMatches, /base64/i);
+  assert.match(serializedMatches, /url/i);
+  assert.equal(serializedMatches.includes(canary), false);
+  assert.equal(serializedMatches.includes(canaryBase64), false);
+  assert.equal(serializedMatches.includes(canaryUrlEncoded), false);
 });
