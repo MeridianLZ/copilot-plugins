@@ -36,6 +36,30 @@ export interface RedactionDisposition {
   bytes: number;
 }
 
+export type NativeSignal = 'trace' | 'metric' | 'log';
+
+export interface NativeOtelRecord {
+  record_id: string;
+  source_file: string;
+  line_number: number;
+  signal: NativeSignal;
+  observed_at_unix_ms: number;
+  trace_id?: string;
+  span_id?: string;
+  parent_span_id?: string;
+  session_id?: string;
+  turn_id?: string;
+  tool_call_id?: string;
+  model?: string;
+  usage?: Record<string, number>;
+  attributes: Record<string, JsonValue>;
+  resource: Record<string, JsonValue>;
+  instrumentation_scope: Record<string, JsonValue>;
+  content_disposition: RedactionDisposition;
+  validity: 'valid' | 'invalid';
+  source_hash: string;
+}
+
 export interface NormalizedHookPayload extends JsonObject {
   hook_event_name: CopilotHookEventName;
   session_id: string;
