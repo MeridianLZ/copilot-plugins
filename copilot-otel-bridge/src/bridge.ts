@@ -81,6 +81,10 @@ function prettyConsole(envelope: HookEnvelope): void {
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const localTelemetry = config.localTelemetry;
+  if (!localTelemetry) {
+    throw new Error('local telemetry runtime configuration missing');
+  }
   await ensureDataDirectories(config.dataDir, config.spoolDir);
 
   const telemetry = initializeTelemetry(config);
@@ -164,6 +168,9 @@ async function main(): Promise<void> {
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, {
           ok: true,
+          local_runtime: true,
+          proxy_mode: 'disabled',
+          telemetry_host: localTelemetry.hostname,
           accepted,
           duplicates,
           failed,

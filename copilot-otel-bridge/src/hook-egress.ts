@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { createEnvelope } from './envelope.js';
 import { ensureDataDirectories, readStdin, writeSpoolFile } from './io.js';
+import { postLocalJson } from './local-runtime.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -12,13 +13,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    const response = await fetch(config.bridgeUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(envelope),
-      signal: AbortSignal.timeout(config.postTimeoutMs)
-    });
-    if (!response.ok) throw new Error(`bridge returned HTTP ${response.status}`);
+    await postLocalJson(new URL(config.bridgeUrl), JSON.stringify(envelope), config.postTimeoutMs);
   } catch {
     await ensureDataDirectories(config.dataDir, config.spoolDir);
     await writeSpoolFile(config.spoolDir, envelope);
