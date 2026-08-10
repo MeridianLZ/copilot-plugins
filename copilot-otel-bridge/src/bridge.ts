@@ -167,16 +167,9 @@ async function main(): Promise<void> {
       const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, {
-          ok: true,
           local_runtime: true,
           proxy_mode: 'disabled',
-          telemetry_host: localTelemetry.hostname,
-          accepted,
-          duplicates,
-          failed,
-          events_file: config.eventsFile,
-          spool_drain_interval_ms: config.spoolDrainIntervalMs,
-          otlp_traces_endpoint: config.otlpTracesEndpoint
+          telemetry_host: localTelemetry.hostname
         });
         return;
       }
