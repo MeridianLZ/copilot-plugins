@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/client';
-import { InMemoryTransport, type SessionEvent } from '@modelcontextprotocol/server';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { buildServer } from '../src/server.js';
 import { CopilotBridge } from '../src/bridge/copilot-bridge.js';
 import { validateCarrier, type TelemetryCarrier } from '../src/telemetry-context.js';
@@ -181,7 +181,7 @@ test('extractHttpRequestContext pulls carrier + request ID from JSON-RPC payload
   assert.deepEqual(extractHttpRequestContext({ jsonrpc: '2.0', method: 'tools/list' }), { requestCarrier: {} });
 });
 
-type Listener = (event: SessionEvent) => void;
+type Listener = (event: { type: string; data?: unknown }) => void;
 
 class FakeSession {
   readonly sessionId = 'inner-session-bridge';
@@ -287,10 +287,10 @@ test('CopilotBridge stores stable peer linkage without duplicate records or secr
   );
   assert.equal(links[0]?.['trace_id'], '4bf92f3577b34da6a3ce929d0e0e4736');
 
-  const sessions = bridge.listSessions() as Array<Record<string, unknown>>;
-  const linked = sessions.find((entry) => entry['session_id'] === session.session_id);
-  assert.equal(linked?.['peer_trace_id'], '4bf92f3577b34da6a3ce929d0e0e4736');
-  assert.equal(linked?.['peer_transport'], 'ws');
-  assert.equal(linked?.['peer_link_count'], 2);
+  const sessions = bridge.listSessions();
+  const linked = sessions.find((entry) => entry.session_id === session.session_id);
+  assert.equal(linked?.peer_trace_id, '4bf92f3577b34da6a3ce929d0e0e4736');
+  assert.equal(linked?.peer_transport, 'ws');
+  assert.equal(linked?.peer_link_count, 2);
   assert.equal(JSON.stringify({ events, sessions }).includes('TOP-SECRET-CANARY'), false);
 });
