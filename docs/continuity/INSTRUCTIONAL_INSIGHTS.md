@@ -2,6 +2,19 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-10 — dependency recovery and vertical progress
+
+- When pnpm optional dependency resolution is the blocker, install only the
+  current platform packages directly and keep manifests/lockfiles untouched;
+  this unblocked typecheck, tests, and build without weakening TLS or exposing
+  proxy credentials.
+- A bounded-state review should trace both successful and error paths. The MCP
+  peer-link bug was reachable through fabricated `session_id` values on
+  failure, not through normal session creation.
+- Once source lanes and correlation are green, stop expanding infrastructure
+  hardening and move to the visible vertical slice: UI evidence panels,
+  append-only run records, and a live acceptance run.
+
 ## 2026-08-10 — reduce pre-implementation overhead
 
 - Once security/runtime and source-lane contracts have passing checks, prefer

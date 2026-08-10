@@ -1,5 +1,29 @@
 # PLANS
 
+## Current status — 2026-08-10 16:32 MDT
+
+The staged implementation has completed the security/runtime, native OTel,
+Collector/API, coverage/correlation, and MCP propagation slices. Current
+implementation commits are:
+
+`3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`, `0936e70`,
+`ab84a74`, `a5c44e1`, `21402e6`, `486d345`, `dd4b6ec`, `7194d44`,
+`73a18d4`, `24a1b40`.
+
+The next approved slice is the UI/evidence integration. It is intentionally
+paused at this checkpoint until the final MCP bounded-state review is read.
+The MCP dependency issue is resolved for implementation and package checks by
+materializing current Windows x64 packages; repository manifests remain
+unchanged.
+
+The historical proxy incident remains immutable and failed. A clean
+post-rotation non-native evidence run is still required before final
+acceptance; it is not being relabeled by this implementation progress.
+
+Older crisis and phase sections below remain durable history. Their pending
+items are superseded where the current status above records a completed
+implementation slice.
+
 ## Current status — 2026-08-10
 
 The approved staged design is committed in

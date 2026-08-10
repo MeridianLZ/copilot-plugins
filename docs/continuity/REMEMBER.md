@@ -2,6 +2,20 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-10 — MCP propagation checkpoint
+
+- **Fact:** MCP propagation is committed through `24a1b40`; W3C carriers cross
+  HTTP/WS JSON-RPC `_meta`, and peer linkage state is bounded.
+- **Invariant:** Never create `#peerBySession` entries for caller-supplied
+  session IDs unless the session is tracked; never let dedupe state outlive
+  the bounded peer-link ring.
+- **Fact:** The current Windows x64 optional packages can be installed directly
+  without changing manifests when the registry's cross-platform optional sweep
+  is unreliable.
+- **Pause point:** UI/evidence work is next; do not reopen completed redaction,
+  native cache, Collector, or MCP implementation unless the final review finds
+  a concrete regression.
+
 ## 2026-08-10 — staged implementation checkpoint
 
 - **Fact:** The implementation worktree completed local redaction/runtime,

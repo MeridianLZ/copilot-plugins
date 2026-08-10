@@ -1,52 +1,44 @@
 # CURRENT TASK STATE
 
-## 2026-08-10 15:49 MDT — native lane complete; MCP install blocked
+## 2026-08-10 16:32 MDT — paused before UI integration
 
 **Worktree:** `feat/copilot-otel-implementation`
 
-**Completed and committed:**
+**Completed:**
 
-- Proxy-aware redaction, including linear raw/base64/URL-encoded scanning and
-  opaque-reasoning handling:
-  `3908917`, `2445000`, `dafcb9d`.
-- Local no-proxy runtime, direct HTTP egress, fail-open hook spool fallback,
-  and minimal health contract:
-  `1db8263`, `cfd5ac8`, `0936e70`.
-- Native OTel trace/metric/log normalization, shared redaction, truncation
-  accounting, restart-safe bounded cache:
+- Proxy-aware redaction and local no-proxy runtime:
+  `3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`, `0936e70`.
+- Native OTel traces/metrics/logs, shared opaque-content redaction,
+  restart-safe bounded cache, truncation accounting:
   `ab84a74`, `a5c44e1`, `21402e6`.
-- Collector durable local signal files, Compose mounts, and sanitized native
-  OTel API:
+- Durable Collector signal files and sanitized native OTel API:
   `486d345`.
-- Source coverage/correlation ledger and coverage API/gap projection:
+- Source coverage/correlation ledger and gap projection:
   `dd4b6ec`.
+- MCP W3C carrier propagation, HTTP/WS extraction, peer linkage, and bounded
+  peer state:
+  `7194d44`, `73a18d4`, `24a1b40`.
 
-**Verification:** bridge package checks are green at 63/63 before the
-correlation slice and the native integration checks are green; native cache
-tests are 10/10. Collector Compose configuration passed validation with
-loopback-only ports. The latest approved implementation worktree was clean
-before the dependency-install attempts.
+**Verification:** MCP typecheck, focused propagation tests (12/12), full MCP
+tests (17/17), and build pass. Fannypack builds. Windows x64 Copilot,
+TypeScript, esbuild, and koffi packages were installed/materialized directly
+after optional cross-platform pnpm downloads proved unreliable. No manifests
+or credentials were changed.
 
-**Current blocker:** `copilot-mcp` dependencies are not materialized in the
-implementation worktree. The new npm/px window reaches the registry, but
-`corepack pnpm@10.15.0 install --frozen-lockfile --force` still receives
-intermittent `502`, `504`, and `ECONNRESET` responses for optional platform
-packages and terminates on a missing optional Darwin package. No credentials
-were printed or added to commands.
+**Paused point:** UI/evidence integration has not started. One read-only MCP
+bounded-state review was still running when this continuity checkpoint was
+created; it must be read before UI implementation resumes.
 
-**Not yet complete:**
+**Remaining critical path:**
 
-- Clean post-rotation non-native acceptance run and canary-negative evidence
-  seal; the historical security-invalid run remains immutable and failed.
-- MCP W3C propagation and peer-session spans.
-- Final three-pane UI coverage/trace inspector.
-- Append-only evidence recorder and live end-to-end acceptance.
+1. Finish/read the MCP bounded-state review.
+2. Build the trace/coverage/MCP evidence inspector in the UI.
+3. Add append-only evidence recording and live acceptance.
+4. Run the clean post-rotation non-native canary-negative checkpoint; retain
+   the historical security-invalid run unchanged.
 
-**Resume command:**
+**Resume directory:**
 
 ```powershell
 cd C:\Users\lzautke\dev\fintech-marketplace\.worktrees\copilot-otel-implementation
 ```
-
-Use the existing px-backed npm configuration and retry the pinned MCP install
-only after registry stability is confirmed. Do not expose proxy values.

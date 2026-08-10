@@ -1,5 +1,24 @@
 # TASKS
 
+## Current checkpoint — 2026-08-10 16:32 MDT
+
+- [x] Centralize proxy-aware redaction and local no-proxy runtime.
+- [x] Normalize, sanitize, persist, and expose native OTel traces, metrics,
+  and logs.
+- [x] Make the native OTel cache restart-safe, bounded, and
+  truncation-accounted.
+- [x] Build source coverage/correlation and explicit gap dispositions.
+- [x] Implement MCP carrier validation, HTTP/WS extraction, peer linkage, and
+  bounded peer state.
+- [ ] Read final MCP bounded-state review.
+- [ ] Build UI trace/coverage/MCP evidence inspector.
+- [ ] Build append-only evidence recorder.
+- [ ] Run clean post-rotation non-native checkpoint.
+- [ ] Run full parent-agent -> MCP peer -> native OTel -> UI acceptance.
+
+The older task sections below are retained as history; this is the active
+execution checklist.
+
 ## Current checkpoint — 2026-08-10 15:49 MDT
 
 - [x] Centralize proxy-aware redaction and eliminate dense-percent ReDoS.

@@ -2,6 +2,20 @@
 
 _Newest first._
 
+## 2026-08-10 — paused before UI integration
+
+- MCP propagation completed: W3C carrier validation/injection/extraction,
+  HTTP/WS request context, peer linkage, and bounded peer state.
+- Commits: `7194d44`, `73a18d4`, `24a1b40`.
+- Verification: focused propagation tests **12/12**, full MCP tests
+  **17/17**, typecheck and build pass. Fannypack build pass.
+- The Windows x64 Copilot, TypeScript, esbuild, and koffi optional packages
+  were materialized directly after full optional pnpm installation repeatedly
+  failed on cross-platform 502/504/ECONNRESET downloads. No package manifests
+  changed.
+- UI/evidence implementation was deliberately paused for compaction. The
+  final MCP bounded-state review remains the immediate resume check.
+
 ## 2026-08-10 — native OTel lane and MCP dependency blocker
 
 - Implemented and reviewed proxy-aware redaction, local no-proxy runtime,
