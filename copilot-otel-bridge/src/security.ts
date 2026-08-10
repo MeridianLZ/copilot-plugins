@@ -35,7 +35,6 @@ const AUTHENTICATED_PROXY_URI_PATTERN =
 const PROXY_ASSIGNMENT_PATTERN = /\b(?:HTTP|HTTPS)_PROXY\s*=\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s\r\n;]+)/gi;
 const BASE64_CANDIDATE_PATTERN = /\b[A-Za-z0-9+/]{16,}={0,2}\b/g;
 const MAX_URL_ENCODED_CANDIDATE_LENGTH = 8_192;
-const URL_ENCODED_SIDE_WINDOW = Math.floor((MAX_URL_ENCODED_CANDIDATE_LENGTH - 3) / 2);
 const REDACTION_KIND_ORDER: readonly RedactionKind[] = ['raw', 'base64', 'url_encoded', 'proxy_uri', 'secret_pattern'];
 
 type SecretPattern = { pattern: RegExp; replacement: string };
@@ -150,46 +149,70 @@ function isPercentHexTriplet(value: string, index: number): boolean {
   );
 }
 
-function collectUrlEncodedCandidateRanges(input: string): { start: number; end: number }[] {
+type UrlEncodedScanMetrics = { scanSteps: number };
+
+function splitUrlEncodedRunIntoBoundedCandidates(
+  input: string,
+  runStart: number,
+  runEnd: number,
+  metrics: UrlEncodedScanMetrics
+): { start: number; end: number }[] {
   const ranges: { start: number; end: number }[] = [];
-  let searchIndex = 0;
-  while (searchIndex < input.length) {
-    const percentIndex = input.indexOf('%', searchIndex);
-    if (percentIndex === -1) break;
-    if (!isPercentHexTriplet(input, percentIndex)) {
-      searchIndex = percentIndex + 1;
-      continue;
+  let chunkStart = runStart;
+  while (chunkStart < runEnd) {
+    let chunkEnd = Math.min(chunkStart + MAX_URL_ENCODED_CANDIDATE_LENGTH, runEnd);
+    if (chunkEnd < runEnd) {
+      if (input[chunkEnd - 1] === '%') chunkEnd -= 1;
+      else if (chunkEnd - 2 >= chunkStart && input[chunkEnd - 2] === '%') chunkEnd -= 2;
     }
 
-    let start = percentIndex;
-    let leftConsumed = 0;
-    while (
-      start > 0 &&
-      leftConsumed < URL_ENCODED_SIDE_WINDOW &&
-      isUrlEncodedCandidateCode(input.charCodeAt(start - 1))
-    ) {
-      start--;
-      leftConsumed++;
+    let hasTriplet = false;
+    for (let index = chunkStart; index + 2 < chunkEnd; index++) {
+      metrics.scanSteps++;
+      if (isPercentHexTriplet(input, index)) {
+        hasTriplet = true;
+        break;
+      }
     }
 
-    let end = percentIndex + 3;
-    let rightConsumed = 0;
-    while (
-      end < input.length &&
-      rightConsumed < URL_ENCODED_SIDE_WINDOW &&
-      isUrlEncodedCandidateCode(input.charCodeAt(end))
-    ) {
-      end++;
-      rightConsumed++;
-    }
-
-    const previous = ranges[ranges.length - 1];
-    if (previous && start <= previous.end) previous.end = Math.max(previous.end, end);
-    else ranges.push({ start, end });
-
-    searchIndex = percentIndex + 3;
+    if (hasTriplet) ranges.push({ start: chunkStart, end: chunkEnd });
+    chunkStart = chunkEnd;
   }
+
   return ranges;
+}
+
+function collectUrlEncodedCandidateRanges(input: string, metrics: UrlEncodedScanMetrics): { start: number; end: number }[] {
+  const ranges: { start: number; end: number }[] = [];
+  let index = 0;
+  while (index < input.length) {
+    while (index < input.length) {
+      metrics.scanSteps++;
+      if (isUrlEncodedCandidateCode(input.charCodeAt(index))) break;
+      index++;
+    }
+    if (index >= input.length) break;
+
+    const runStart = index;
+    let hasTripletInRun = false;
+    while (index < input.length) {
+      metrics.scanSteps++;
+      if (!isUrlEncodedCandidateCode(input.charCodeAt(index))) break;
+      if (!hasTripletInRun && isPercentHexTriplet(input, index)) hasTripletInRun = true;
+      index++;
+    }
+
+    if (!hasTripletInRun) continue;
+    ranges.push(...splitUrlEncodedRunIntoBoundedCandidates(input, runStart, index, metrics));
+  }
+
+  return ranges;
+}
+
+export function collectUrlEncodedCandidateMetricsForTest(input: string): { rangeCount: number; scanSteps: number } {
+  const metrics: UrlEncodedScanMetrics = { scanSteps: 0 };
+  const ranges = collectUrlEncodedCandidateRanges(input, metrics);
+  return { rangeCount: ranges.length, scanSteps: metrics.scanSteps };
 }
 
 function resolveReplacementTemplate(template: string, match: RegExpExecArray): string {
@@ -319,7 +342,7 @@ function collectSecretMatches(input: string): SecretMatchCandidate[] {
     base64Match = BASE64_CANDIDATE_PATTERN.exec(input);
   }
 
-  const encodedRanges = collectUrlEncodedCandidateRanges(input);
+  const encodedRanges = collectUrlEncodedCandidateRanges(input, { scanSteps: 0 });
   for (const range of encodedRanges) {
     const encodedValue = input.slice(range.start, range.end);
     const decoded = decodeUrlEncodedCandidate(encodedValue);

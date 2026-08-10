@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { findSecretMatches, sanitizeJson, sanitizeSecrets, stableJson } from '../src/security.js';
+import {
+  collectUrlEncodedCandidateMetricsForTest,
+  findSecretMatches,
+  sanitizeJson,
+  sanitizeSecrets,
+  stableJson
+} from '../src/security.js';
 import { isJsonObject, type JsonObject } from '../src/types.js';
 
 const canary = 'http://canary-user:canary-pass@proxy.invalid:8080';
@@ -101,4 +107,15 @@ test('sanitizeSecrets handles large ASCII input without percent triplets', { tim
     kinds: [],
     bytes: Buffer.byteLength(input, 'utf8')
   });
+});
+
+test('sanitizeSecrets bounds dense url-encoded candidate scanning work', () => {
+  const denseEncodedFiller = '%41'.repeat(120_000);
+  const metrics = collectUrlEncodedCandidateMetricsForTest(denseEncodedFiller);
+
+  assert.equal(metrics.rangeCount > 0, true);
+  assert.equal(metrics.scanSteps <= denseEncodedFiller.length * 3, true);
+
+  const sanitized = sanitizeSecrets(denseEncodedFiller);
+  assert.equal(sanitized.text, denseEncodedFiller);
 });
