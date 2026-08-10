@@ -50,7 +50,7 @@ test('tool identity remains structural while arguments and results are hashed', 
 
 test('full mode redacts common bearer and API key formats', () => {
   const sanitized = sanitizeJson(
-    { note: 'Authorization: ******; key sk-ant-abcdefghijklmnopqrstuv' },
+    { note: 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz; key sk-ant-abcdefghijklmnopqrstuv' },
     'full',
     32_768
   );
