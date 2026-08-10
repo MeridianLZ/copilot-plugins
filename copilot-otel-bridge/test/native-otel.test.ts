@@ -189,6 +189,66 @@ test('NativeOtelCache restarts a file when truncation occurs', async () => {
   });
 });
 
+test('NativeOtelCache emits reset when file is rewritten with a larger payload', async () => {
+  await withRuntimeDirectory(async (directory) => {
+    const filePath = path.join(directory, 'native-otel-logs.jsonl');
+    const oldA = makeCacheLine('session-rewrite-old-a', 1_723_298_460_000, 'w1');
+    const oldB = makeCacheLine('session-rewrite-old-b', 1_723_298_461_000, 'w2');
+    const oldContent = `${oldA}\n${oldB}\n`;
+    await writeFile(filePath, oldContent, 'utf8');
+
+    const cache = new NativeOtelCache(directory, 100);
+    const before = await cache.getRecords();
+    assert.equal(before.length, 2);
+
+    const newA = makeCacheLine('session-rewrite-new-a', 1_723_298_462_000, 'w3');
+    const newB = makeCacheLine('session-rewrite-new-b', 1_723_298_463_000, 'w4');
+    const newC = makeCacheLine('session-rewrite-new-c', 1_723_298_464_000, 'w5');
+    await writeFile(filePath, `${newA}\n${newB}\n${newC}\n`, 'utf8');
+
+    const after = await cache.getRecords();
+    assert.equal(after.length, 4);
+    assert.equal(after[0]?.validity, 'invalid');
+    assert.equal(after[0]?.attributes['reason'], 'source_truncated_reset');
+    assert.equal(after[0]?.attributes['previous_byte_offset'], Buffer.byteLength(oldContent, 'utf8'));
+    assert.equal(after[0]?.attributes['previous_line_number'], 2);
+    assert.deepEqual(
+      after.slice(1).map((record) => record.session_id),
+      ['session-rewrite-new-a', 'session-rewrite-new-b', 'session-rewrite-new-c']
+    );
+    assert.equal(after.some((record) => record.session_id?.startsWith('session-rewrite-old-') === true), false);
+  });
+});
+
+test('NativeOtelCache reads large files in bounded chunks without skipping data', async () => {
+  await withRuntimeDirectory(async (directory) => {
+    const filePath = path.join(directory, 'native-otel-logs.jsonl');
+    const totalLines = 3_000;
+    const lines = Array.from({ length: totalLines }, (_value, index) =>
+      makeCacheLine(`session-bounded-${index}`, 1_723_298_470_000 + index, `bound-${index}`)
+    );
+    await writeFile(filePath, `${lines.join('\n')}\n`, 'utf8');
+
+    const cache = new NativeOtelCache(directory, totalLines + 10);
+    const firstRead = await cache.getRecords();
+    assert.equal(firstRead.length > 0, true);
+    assert.equal(firstRead.length < totalLines, true);
+
+    let records = firstRead;
+    let polls = 0;
+    while (records.length < totalLines && polls < 20) {
+      records = await cache.getRecords();
+      polls += 1;
+    }
+
+    assert.equal(records.length, totalLines);
+    assert.equal(records[0]?.session_id, 'session-bounded-0');
+    assert.equal(records[records.length - 1]?.session_id, `session-bounded-${totalLines - 1}`);
+    assert.equal(new Set(records.map((record) => record.session_id)).size, totalLines);
+    assert.equal(records.some((record) => record.session_id?.includes('\u0000') === true), false);
+  });
+});
+
 test('NativeOtelCache enforces maxRecords bound', async () => {
   await withRuntimeDirectory(async (directory) => {
     const filePath = path.join(directory, 'native-otel-logs.jsonl');

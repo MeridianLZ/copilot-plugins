@@ -28,12 +28,53 @@ interface CacheEntry {
   remainder: string;
   records: NativeOtelRecord[];
   lastTouchedMs: number;
+  fileIdentity: string | undefined;
+  consumedPrefixFingerprint: string | undefined;
 }
 
 const IDLE_EVICT_MS = 10 * 60 * 1000;
+const MAX_REFRESH_READ_BYTES = 256 * 1024;
+const FINGERPRINT_SAMPLE_BYTES = 4 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function describeFileIdentity(metadata: Awaited<ReturnType<typeof stat>>): string {
+  const birthtimeMs = Math.trunc(Number(metadata.birthtimeMs));
+  const ctimeMs = Math.trunc(Number(metadata.ctimeMs));
+  return `${birthtimeMs}:${ctimeMs}:${metadata.size}`;
+}
+
+async function readSlice(handle: Awaited<ReturnType<typeof open>>, position: number, length: number): Promise<Buffer> {
+  if (length <= 0) return Buffer.alloc(0);
+  const buffer = Buffer.alloc(length);
+  const { bytesRead } = await handle.read(buffer, 0, length, position);
+  if (bytesRead <= 0) return Buffer.alloc(0);
+  return buffer.subarray(0, bytesRead);
+}
+
+async function fingerprintConsumedPrefix(filePath: string, consumedBytes: number): Promise<string> {
+  if (consumedBytes <= 0) return 'offset:0';
+  const handle = await open(filePath, 'r');
+  try {
+    const headLength = Math.min(consumedBytes, FINGERPRINT_SAMPLE_BYTES);
+    const tailLength = Math.min(consumedBytes, FINGERPRINT_SAMPLE_BYTES);
+    const head = await readSlice(handle, 0, headLength);
+    const tailStart = Math.max(0, consumedBytes - tailLength);
+    const tail = tailStart === 0 ? head : await readSlice(handle, tailStart, tailLength);
+    return createHash('sha256')
+      .update(String(consumedBytes))
+      .update(':')
+      .update(head)
+      .update(':')
+      .update(String(tailStart))
+      .update(':')
+      .update(tail)
+      .digest('hex');
+  } finally {
+    await handle.close();
+  }
 }
 
 function getField(object: Record<string, unknown>, ...keys: string[]): unknown {
@@ -581,7 +622,8 @@ function truncationResetRecord(
   previousByteOffset: number,
   previousLineNumber: number,
   previousRemainder: string,
-  newByteSize: number
+  newByteSize: number,
+  resetKind: 'size_decrease' | 'prefix_discontinuity'
 ): NativeOtelRecord {
   const signal = inferSignalFromSourceFile(sourceFile);
   const contextLine = Math.max(1, previousLineNumber + (previousRemainder.length > 0 ? 1 : 0));
@@ -596,6 +638,7 @@ function truncationResetRecord(
     observed_at_unix_ms: 0,
     attributes: {
       reason: 'source_truncated_reset',
+      reset_kind: resetKind,
       previous_byte_offset: previousByteOffset,
       previous_line_number: previousLineNumber,
       new_byte_size: newByteSize,
@@ -768,7 +811,15 @@ export class NativeOtelCache {
       seen.add(absolutePath);
       let entry = this.#entries.get(absolutePath);
       if (!entry) {
-        entry = { byteOffset: 0, lineOffset: 0, remainder: '', records: [], lastTouchedMs: now };
+        entry = {
+          byteOffset: 0,
+          lineOffset: 0,
+          remainder: '',
+          records: [],
+          lastTouchedMs: now,
+          fileIdentity: undefined,
+          consumedPrefixFingerprint: undefined
+        };
         this.#entries.set(absolutePath, entry);
       }
       entry.lastTouchedMs = now;
@@ -787,44 +838,74 @@ export class NativeOtelCache {
   async #refreshFile(filePath: string, entry: CacheEntry): Promise<void> {
     try {
       const metadata = await stat(filePath);
+      const currentIdentity = describeFileIdentity(metadata);
+
+      let resetKind: 'size_decrease' | 'prefix_discontinuity' | undefined;
       if (metadata.size < entry.byteOffset) {
+        resetKind = 'size_decrease';
+      } else if (entry.byteOffset > 0) {
+        const currentPrefixFingerprint = await fingerprintConsumedPrefix(filePath, entry.byteOffset);
+        if (
+          entry.consumedPrefixFingerprint !== undefined &&
+          currentPrefixFingerprint !== entry.consumedPrefixFingerprint
+        ) {
+          resetKind = 'prefix_discontinuity';
+        } else {
+          entry.consumedPrefixFingerprint = currentPrefixFingerprint;
+        }
+      }
+
+      if (resetKind !== undefined) {
         const resetRecord = truncationResetRecord(
           filePath,
           entry.byteOffset,
           entry.lineOffset,
           entry.remainder,
-          metadata.size
+          metadata.size,
+          resetKind
         );
         entry.byteOffset = 0;
         entry.lineOffset = 0;
         entry.remainder = '';
         entry.records = [resetRecord];
+        entry.consumedPrefixFingerprint = undefined;
       }
+
+      entry.fileIdentity = currentIdentity;
       if (metadata.size <= entry.byteOffset) return;
 
-      const length = metadata.size - entry.byteOffset;
+      const length = Math.min(metadata.size - entry.byteOffset, MAX_REFRESH_READ_BYTES);
       const buffer = Buffer.alloc(length);
       const handle = await open(filePath, 'r');
+      let bytesRead = 0;
       try {
-        await handle.read(buffer, 0, length, entry.byteOffset);
+        const readResult = await handle.read(buffer, 0, length, entry.byteOffset);
+        bytesRead = readResult.bytesRead;
       } finally {
         await handle.close();
       }
+      if (bytesRead <= 0) return;
 
-      entry.byteOffset += length;
-      const chunk = `${entry.remainder}${buffer.toString('utf8')}`;
+      entry.byteOffset += bytesRead;
+      const chunk = `${entry.remainder}${buffer.subarray(0, bytesRead).toString('utf8')}`;
       const lines = chunk.split('\n');
       entry.remainder = lines.pop() ?? '';
-      if (lines.length === 0) return;
-
-      const parsed = parseNativeOtelLines(lines, filePath);
-      for (const record of parsed) {
-        entry.records.push({
-          ...record,
-          line_number: record.line_number + entry.lineOffset
-        });
+      if (lines.length > 0) {
+        const parsed = parseNativeOtelLines(lines, filePath);
+        for (const record of parsed) {
+          entry.records.push({
+            ...record,
+            line_number: record.line_number + entry.lineOffset
+          });
+        }
+        entry.lineOffset += lines.length;
       }
-      entry.lineOffset += lines.length;
+
+      if (entry.byteOffset > 0) {
+        entry.consumedPrefixFingerprint = await fingerprintConsumedPrefix(filePath, entry.byteOffset);
+      } else {
+        entry.consumedPrefixFingerprint = undefined;
+      }
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         // transient file lock/read failure: preserve current cache state
