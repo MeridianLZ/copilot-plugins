@@ -55,7 +55,11 @@ export class CopilotBridge {
     this.#starting ??= (async () => {
       const client = this.config.cliUrl
         ? new CopilotClient({ connection: RuntimeConnection.forUri(this.config.cliUrl) })
-        : new CopilotClient();
+        : this.config.cliPath
+          ? new CopilotClient({
+              connection: RuntimeConnection.forStdio({ path: this.config.cliPath }),
+            })
+          : new CopilotClient();
       await client.start();
       this.#client = client;
       return client;

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,8 @@ export interface CopilotMcpConfig {
   model: string | undefined;
   /** Attach to an external `copilot --headless` server instead of spawning. */
   cliUrl: string | undefined;
+  /** Spawn a system-installed Copilot CLI instead of the SDK-bundled runtime. */
+  cliPath: string | undefined;
   askTimeoutMs: number;
 }
 
@@ -38,6 +41,27 @@ function loadDotEnv(): void {
   }
 }
 
+function resolveCliPath(value: string | undefined): string | undefined {
+  const cliPath = value?.trim();
+  if (!cliPath || path.isAbsolute(cliPath) || cliPath.includes('/') || cliPath.includes('\\')) {
+    return cliPath || undefined;
+  }
+
+  try {
+    const command = process.platform === 'win32' ? 'where.exe' : 'which';
+    const resolved = execFileSync(command, [cliPath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean);
+    return resolved ?? cliPath;
+  } catch {
+    return cliPath;
+  }
+}
+
 export function loadConfig(): CopilotMcpConfig {
   loadDotEnv();
   const permissions = process.env['COPILOT_MCP_PERMISSIONS'] === 'approve-all' ? 'approve-all' : 'readonly';
@@ -47,6 +71,7 @@ export function loadConfig(): CopilotMcpConfig {
     permissions,
     model: process.env['COPILOT_MCP_MODEL'] || undefined,
     cliUrl: process.env['COPILOT_MCP_CLI_URL'] || undefined,
+    cliPath: resolveCliPath(process.env['COPILOT_MCP_CLI_PATH'] || process.env['COPILOT_CLI_PATH']),
     askTimeoutMs: Number(process.env['COPILOT_MCP_ASK_TIMEOUT_MS'] ?? 300_000),
   };
 }

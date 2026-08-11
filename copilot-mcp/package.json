@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "@agent-fannypack/mcp": "link:../agent-fannypack/mcp",
-    "@github/copilot-sdk": "1.0.8",
+    "@github/copilot": "1.0.79",
+    "@github/copilot-sdk": "1.0.9",
     "@modelcontextprotocol/node": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "ws": "8.21.2",

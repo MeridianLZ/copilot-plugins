@@ -115,6 +115,14 @@ function packageRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 }
 
+function inheritedEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
+}
+
 function makeTransport(kind: 'stdio' | 'http' | 'ws', baseUrl: string): Transport {
   switch (kind) {
     case 'stdio':
@@ -122,6 +130,7 @@ function makeTransport(kind: 'stdio' | 'http' | 'ws', baseUrl: string): Transpor
         command: process.execPath,
         args: [path.join(packageRoot(), 'dist', 'transports', 'stdio.js')],
         cwd: packageRoot(),
+        env: inheritedEnvironment(),
       });
     case 'http':
       return new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));

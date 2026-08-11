@@ -22,7 +22,9 @@ The **full GitHub Copilot CLI agentic process wrapped as an MCP server**, so oth
 
 ## Config (SSoT: `.env`)
 
-Copy [.env.example](.env.example) → `.env`. Keys: `COPILOT_MCP_HOST` (127.0.0.1), `COPILOT_MCP_HTTP_PORT` (27443, carries both Streamable HTTP and the WS upgrade), `COPILOT_MCP_PERMISSIONS` (`readonly` default: Copilot may read/search, write/shell rejected; `approve-all` opt-in), `COPILOT_MCP_MODEL`, `COPILOT_MCP_CLI_URL`, `COPILOT_MCP_ASK_TIMEOUT_MS`.
+Copy [.env.example](.env.example) → `.env`. Keys: `COPILOT_MCP_HOST` (127.0.0.1), `COPILOT_MCP_HTTP_PORT` (27443, carries both Streamable HTTP and the WS upgrade), `COPILOT_MCP_PERMISSIONS` (`readonly` default: Copilot may read/search, write/shell rejected; `approve-all` opt-in), `COPILOT_MCP_MODEL`, `COPILOT_MCP_CLI_URL`, `COPILOT_MCP_CLI_PATH` (for example `copilot` or an absolute executable path), `COPILOT_MCP_ASK_TIMEOUT_MS`.
+
+When the SDK-bundled platform package is unavailable, set `COPILOT_MCP_CLI_PATH=copilot` to use an installed Copilot CLI from `PATH`. `COPILOT_CLI_PATH` is also accepted for compatibility with the SDK.
 
 ## Run
 
