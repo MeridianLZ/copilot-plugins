@@ -1,5 +1,44 @@
 # TASKS
 
+## Current checkpoint — 2026-08-10 16:32 MDT
+
+- [x] Centralize proxy-aware redaction and local no-proxy runtime.
+- [x] Normalize, sanitize, persist, and expose native OTel traces, metrics,
+  and logs.
+- [x] Make the native OTel cache restart-safe, bounded, and
+  truncation-accounted.
+- [x] Build source coverage/correlation and explicit gap dispositions.
+- [x] Implement MCP carrier validation, HTTP/WS extraction, peer linkage, and
+  bounded peer state.
+- [ ] Read final MCP bounded-state review.
+- [ ] Build UI trace/coverage/MCP evidence inspector.
+- [ ] Build append-only evidence recorder.
+- [ ] Run clean post-rotation non-native checkpoint.
+- [ ] Run full parent-agent -> MCP peer -> native OTel -> UI acceptance.
+
+The older task sections below are retained as history; this is the active
+execution checklist.
+
+## Current checkpoint — 2026-08-10 15:49 MDT
+
+- [x] Centralize proxy-aware redaction and eliminate dense-percent ReDoS.
+- [x] Enforce local no-proxy bridge/runtime behavior and preserve hook spool
+  fallback.
+- [x] Normalize native OTel traces, metrics, and logs with shared redaction.
+- [x] Make native OTel cache restart-safe, bounded, and truncation-accounted.
+- [x] Persist Collector signals locally and expose sanitized native OTel API.
+- [x] Build source coverage/correlation ledger and gap projection.
+- [ ] Complete clean post-rotation non-native canary-negative acceptance run.
+- [ ] Restore `copilot-mcp` dependency installation; current px/npm retries end
+  with optional-package 502/504/ECONNRESET failures and missing Darwin package
+  materialization.
+- [ ] Implement MCP W3C propagation and peer-session trace linkage.
+- [ ] Finish UI trace/coverage inspector.
+- [ ] Implement append-only evidence recorder and full live acceptance.
+
+The historical incident and older task lists below are retained for audit
+history; the checklist above is the active execution state.
+
 ## Critical security incident — 2026-08-08
 
 - [x] Preserve the failed bootstrap evidence and correction records.

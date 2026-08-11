@@ -6,6 +6,8 @@ import {
   type SessionTrace
 } from './trace-projector.js';
 import { projectNativeConversation, type NativeEvent } from './native-session.js';
+import type { CoverageDisposition, CoverageEntry } from './correlation.js';
+import { redactSecrets, truncateUtf8 } from './security.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -267,6 +269,66 @@ function lifecycleShell(
   };
 }
 
+const GAP_DISPOSITIONS = new Set<CoverageDisposition>([
+  'unmatched',
+  'invalid',
+  'unavailable',
+  'late_out_of_order'
+]);
+
+function sanitizeCoverageText(value: string, maxBytes = 256): string {
+  const redacted = truncateUtf8(redactSecrets(value), maxBytes);
+  return redacted.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function coverageGapNode(entry: CoverageEntry, depth: number, ordinal: number): ConversationNode {
+  const sourceKind = sanitizeCoverageText(entry.source_kind);
+  const sourceId = sanitizeCoverageText(entry.source_id);
+  const disposition = sanitizeCoverageText(entry.disposition);
+  const reason = sanitizeCoverageText(entry.reason);
+  const timeMs = Number.isFinite(entry.timestamp_ms) ? entry.timestamp_ms : Date.now();
+  const node: ConversationNode = {
+    id: `coverage-gap:${sourceKind}:${sourceId}:${ordinal}`,
+    kind: 'event',
+    timestamp_ms: timeMs,
+    timestamp_iso: iso(timeMs),
+    title: `Coverage gap · ${disposition}`,
+    depth,
+    status: 'error',
+    content: [
+      { role: 'meta', label: 'source_kind', text: sourceKind },
+      { role: 'meta', label: 'source_id', text: sourceId },
+      { role: 'meta', label: 'disposition', text: disposition },
+      { role: 'meta', label: 'reason', text: reason }
+    ],
+    children: []
+  };
+  if (entry.canonical_id !== undefined) {
+    node.content.push({ role: 'meta', label: 'canonical_id', text: sanitizeCoverageText(entry.canonical_id) });
+  }
+  if (entry.matched_by !== undefined) {
+    node.content.push({ role: 'meta', label: 'matched_by', text: sanitizeCoverageText(entry.matched_by) });
+  }
+  if (entry.related_ids.length > 0) {
+    node.content.push({
+      role: 'meta',
+      label: 'related_ids',
+      json: entry.related_ids.map((value) => sanitizeCoverageText(value))
+    });
+  }
+  return node;
+}
+
+function attachCoverageGapNodes(root: ConversationNode, entries: readonly CoverageEntry[]): void {
+  const gaps = entries.filter((entry) => GAP_DISPOSITIONS.has(entry.disposition));
+  if (gaps.length === 0) return;
+  const depth = root.depth + 1;
+  for (let index = 0; index < gaps.length; index++) {
+    root.children.push(coverageGapNode(gaps[index]!, depth, index + 1));
+  }
+  root.children.sort((left, right) => left.timestamp_ms - right.timestamp_ms);
+}
+
 /** Hook events worth overlaying on a native-first tree: signals the native
  * stream does not carry (or carries less directly). */
 const OVERLAY_EVENTS = new Set<CopilotHookEventName>(['errorOccurred', 'preCompact', 'notification', 'postToolUseFailure']);
@@ -274,7 +336,8 @@ const OVERLAY_EVENTS = new Set<CopilotHookEventName>(['errorOccurred', 'preCompa
 function projectNativeFirst(
   trace: SessionTrace,
   sessionId: string,
-  nativeEvents: readonly NativeEvent[]
+  nativeEvents: readonly NativeEvent[],
+  coverageEntries: readonly CoverageEntry[]
 ): ConversationDocument {
   const events = trace.events;
   const spans = trace.spans;
@@ -301,6 +364,7 @@ function projectNativeFirst(
   const hookErrorCount = events.filter(
     (e) => e.payload.hook_event_name === 'errorOccurred'
   ).length;
+  attachCoverageGapNodes(root, coverageEntries);
 
   return {
     schema_version: '1.1.0',
@@ -327,10 +391,11 @@ function projectNativeFirst(
 export function projectConversation(
   envelopes: readonly HookEnvelope[],
   sessionId: string,
-  nativeEvents: readonly NativeEvent[] = []
+  nativeEvents: readonly NativeEvent[] = [],
+  coverageEntries: readonly CoverageEntry[] = []
 ): ConversationDocument {
   const trace: SessionTrace = projectSessionTrace(envelopes, sessionId);
-  if (nativeEvents.length > 0) return projectNativeFirst(trace, sessionId, nativeEvents);
+  if (nativeEvents.length > 0) return projectNativeFirst(trace, sessionId, nativeEvents, coverageEntries);
   const events = trace.events;
   const spans = trace.spans;
   const spanByStart = new Map(spans.filter((s) => s.kind !== 'point').map((s) => [s.start_event_id, s]));
@@ -501,6 +566,9 @@ export function projectConversation(
     if (name === 'postToolUseFailure' || name === 'errorOccurred') errorCount += 1;
   }
 
+  const projectedRoot = sessionNode ?? root;
+  attachCoverageGapNodes(projectedRoot, coverageEntries);
+
   return {
     schema_version: '1.1.0',
     source: 'hooks-only',
@@ -516,7 +584,7 @@ export function projectConversation(
     tool_count: toolCount,
     subagent_count: subagentCount,
     error_count: errorCount,
-    root: sessionNode ?? root,
+    root: projectedRoot,
     events,
     spans
   };

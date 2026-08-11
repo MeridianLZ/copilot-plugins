@@ -2,6 +2,36 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-10 — dependency recovery and vertical progress
+
+- When pnpm optional dependency resolution is the blocker, install only the
+  current platform packages directly and keep manifests/lockfiles untouched;
+  this unblocked typecheck, tests, and build without weakening TLS or exposing
+  proxy credentials.
+- A bounded-state review should trace both successful and error paths. The MCP
+  peer-link bug was reachable through fabricated `session_id` values on
+  failure, not through normal session creation.
+- Once source lanes and correlation are green, stop expanding infrastructure
+  hardening and move to the visible vertical slice: UI evidence panels,
+  append-only run records, and a live acceptance run.
+
+## 2026-08-10 — reduce pre-implementation overhead
+
+- Once security/runtime and source-lane contracts have passing checks, prefer
+  larger vertical slices over repeated per-file review loops. The final user
+  value is the live dual-lane UI, not an accumulation of isolated parser
+  commits.
+- Keep dependency failures separate from implementation status. Here, native
+  OTel and bridge work are complete and tested; MCP is blocked by registry
+  optional-package materialization, not by missing source design.
+- For corporate npm access on Windows, a new proxy window can still produce
+  intermittent upstream 502/504/connection-reset failures even when the local
+  proxy listener is healthy. Record the exact package-manager failure and stop
+  before introducing insecure TLS or credential-bearing command workarounds.
+- When a continuity refresh occurs during active implementation, record the
+  current commit chain and worktree state first; older crisis/task sections
+  remain durable history but must be explicitly marked superseded.
+
 ## 2026-08-06 latest (FAQ pass)
 
 - **Answer capability questions from the installed `.d.ts` and a live probe, not docs or memory.** "Can the primary agent set effort?" resolved in one grep of `SessionConfigBase`/`session.setModel` — including the capability gate (`supports.reasoningEffort`) that docs elide.

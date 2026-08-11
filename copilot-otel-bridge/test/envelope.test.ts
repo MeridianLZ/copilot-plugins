@@ -16,6 +16,8 @@ const config: BridgeConfig = {
   dataDir: '/tmp/copilot-hooks-test',
   eventsFile: '/tmp/copilot-hooks-test/hook-events.jsonl',
   spoolDir: '/tmp/copilot-hooks-test/spool',
+  nativeOtelDirectory: 'native-otel-test',
+  nativeOtelMaxRecords: 100_000,
   contentMode: 'hash',
   contentMaxBytes: 32_768,
   postTimeoutMs: 250,

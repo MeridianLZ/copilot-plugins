@@ -2,6 +2,40 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-10 — MCP propagation checkpoint
+
+- **Fact:** MCP propagation is committed through `24a1b40`; W3C carriers cross
+  HTTP/WS JSON-RPC `_meta`, and peer linkage state is bounded.
+- **Invariant:** Never create `#peerBySession` entries for caller-supplied
+  session IDs unless the session is tracked; never let dedupe state outlive
+  the bounded peer-link ring.
+- **Fact:** The current Windows x64 optional packages can be installed directly
+  without changing manifests when the registry's cross-platform optional sweep
+  is unreliable.
+- **Pause point:** UI/evidence work is next; do not reopen completed redaction,
+  native cache, Collector, or MCP implementation unless the final review finds
+  a concrete regression.
+
+## 2026-08-10 — staged implementation checkpoint
+
+- **Fact:** The implementation worktree completed local redaction/runtime,
+  native OTel normalization/cache, durable Collector signal files, sanitized
+  native OTel API, and source coverage/correlation through commit `dd4b6ec`.
+- **Invariant:** The native transcript remains the conversation-fidelity lane;
+  native OTel is the execution/usage/timing lane; hooks remain governance and
+  control-plane evidence.
+- **Invariant:** The local tap path does not need the enterprise proxy. Bridge,
+  hooks, Collector, UI, and local MCP traffic must use loopback/private WSL
+  paths and must not receive proxy credentials.
+- **Pitfall:** In a fresh Windows/npm window, pnpm still attempts many optional
+  platform tarballs. Registry 502/504/ECONNRESET failures can leave a missing
+  optional package and make installation terminate with ENOENT. Do not change
+  source or print credentials to work around this; stabilize the package
+  source/cache or use a platform-filtered installation method that is proven
+  to work.
+- **Fact:** No MCP package install retry in this checkpoint exposed the proxy
+  value; only environment presence and lengths were inspected.
+
 ## 2026-08-06 latest (hook mechanics + SDK control surface)
 
 - **Fact:** Copilot CLI hooks have NO feedback channel to the harness except the exit code; only `preToolUse` reacts (non-zero = deny). No structured decision JSON, no arg rewriting, no context/model mutation from hooks.

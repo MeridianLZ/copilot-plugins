@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig } from './config.js';
+import { loadConfig, withValidatedLocalTelemetry } from './config.js';
 import { createEnvelope } from './envelope.js';
 import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
@@ -10,7 +10,11 @@ import { SpanAssembler } from './span-assembler.js';
 import { conversationToMarkdown, projectConversation } from './conversation-projector.js';
 import { createPayloadDeduper } from './dedupe.js';
 import { NativeSessionCache } from './native-cache.js';
+import { NativeOtelCache } from './native-otel.js';
+import type { NativeEvent } from './native-session.js';
 import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
+import { correlateSources, type CoverageEntry } from './correlation.js';
+import { buildSourceRecords, summarizeCoverage, type CoverageTotals } from './coverage.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 
 function uiIndexPath(): string {
@@ -80,12 +84,18 @@ function prettyConsole(envelope: HookEnvelope): void {
 }
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = withValidatedLocalTelemetry(loadConfig());
+  const localTelemetry = config.localTelemetry;
+  if (!localTelemetry) {
+    throw new Error('local telemetry runtime configuration missing');
+  }
   await ensureDataDirectories(config.dataDir, config.spoolDir);
+  await mkdir(config.nativeOtelDirectory, { recursive: true, mode: 0o700 });
 
   const telemetry = initializeTelemetry(config);
   const assembler = new SpanAssembler(telemetry.tracer, config);
   const nativeCache = new NativeSessionCache(config.copilotHome);
+  const nativeOtelCache = new NativeOtelCache(config.nativeOtelDirectory, config.nativeOtelMaxRecords);
   let accepted = 0;
   let duplicates = 0;
   let failed = 0;
@@ -144,6 +154,32 @@ async function main(): Promise<void> {
     }
   };
 
+  const buildSessionCoverage = async (
+    sessionId: string,
+    ledger: readonly HookEnvelope[],
+    providedNativeEvents?: readonly NativeEvent[]
+  ): Promise<{
+    known: boolean;
+    entries: CoverageEntry[];
+    totals: CoverageTotals;
+    nativeEvents: readonly NativeEvent[];
+  }> => {
+    const trace = projectSessionTrace(ledger, sessionId);
+    const nativeEvents = providedNativeEvents ?? await nativeCache.getNativeEvents(sessionId);
+    const nativeOtelRecords = (await nativeOtelCache.getRecords()).filter((record) => record.session_id === sessionId);
+    const records = buildSourceRecords({
+      sessionId,
+      hooks: trace.events,
+      nativeEvents,
+      nativeOtelRecords,
+      spans: trace.spans
+    });
+    const entries = correlateSources(records);
+    const totals = summarizeCoverage(entries);
+    const known = trace.events.length > 0 || nativeEvents.length > 0 || nativeOtelRecords.length > 0;
+    return { known, entries, totals, nativeEvents };
+  };
+
   const initialDrained = await replaySpool();
   if (initialDrained > 0) process.stdout.write(`[bridge] replayed ${initialDrained} spooled hook events\n`);
 
@@ -164,12 +200,9 @@ async function main(): Promise<void> {
       if (request.method === 'GET' && url.pathname === '/health') {
         sendJson(response, 200, {
           ok: true,
-          accepted,
-          duplicates,
-          failed,
-          events_file: config.eventsFile,
-          spool_drain_interval_ms: config.spoolDrainIntervalMs,
-          otlp_traces_endpoint: config.otlpTracesEndpoint
+          local_runtime: true,
+          proxy_mode: 'disabled',
+          telemetry_host: localTelemetry.hostname
         });
         return;
       }
@@ -193,16 +226,50 @@ async function main(): Promise<void> {
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
         await ingestTail;
         const remainder = decodeURIComponent(url.pathname.slice('/api/sessions/'.length));
+        const nativeOtelMatch = /^(.*)\/native-otel$/.exec(remainder);
         const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
-        const sessionId = conversationMatch ? conversationMatch[1] ?? remainder : remainder;
+        const coverageMatch = /^(.*)\/coverage$/.exec(remainder);
+        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? remainder;
         const ledger = await readLedger(config.eventsFile);
-        if (conversationMatch) {
-          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
-          const conversation = projectConversation(ledger, sessionId, nativeEvents);
-          if (conversation.event_count === 0) {
+        if (nativeOtelMatch) {
+          const records = (await nativeOtelCache.getRecords())
+            .filter((record) => record.session_id === sessionId)
+            .map((record) => ({
+              ...record,
+              source_file: path.basename(record.source_file)
+            }));
+          if (records.length === 0 && projectSessionTrace(ledger, sessionId).events.length === 0) {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;
           }
+          sendJson(response, 200, {
+            records,
+            count: records.length,
+            generated_at: new Date().toISOString()
+          });
+          return;
+        }
+        if (coverageMatch) {
+          const coverage = await buildSessionCoverage(sessionId, ledger);
+          if (!coverage.known) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          sendJson(response, 200, {
+            entries: coverage.entries,
+            totals: coverage.totals,
+            generated_at: new Date().toISOString()
+          });
+          return;
+        }
+        if (conversationMatch) {
+          const nativeEvents = await nativeCache.getNativeEvents(sessionId);
+          const coverage = await buildSessionCoverage(sessionId, ledger, nativeEvents);
+          if (!coverage.known) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const conversation = projectConversation(ledger, sessionId, coverage.nativeEvents, coverage.entries);
           const format = conversationMatch[2] ?? url.searchParams.get('format') ?? 'json';
           if (format === 'md' || format === 'markdown') {
             const markdown = conversationToMarkdown(conversation);

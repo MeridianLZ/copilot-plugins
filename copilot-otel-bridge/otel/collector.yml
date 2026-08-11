@@ -16,8 +16,36 @@ processors:
     send_batch_size: 256
 
 exporters:
-  debug:
-    verbosity: detailed
+  file/traces:
+    path: /native-otel/traces.jsonl
+    format: json
+    create_directory: true
+    directory_permissions: "0700"
+    rotation:
+      max_megabytes: 25
+      max_days: 7
+      max_backups: 10
+      localtime: false
+  file/metrics:
+    path: /native-otel/metrics.jsonl
+    format: json
+    create_directory: true
+    directory_permissions: "0700"
+    rotation:
+      max_megabytes: 25
+      max_days: 7
+      max_backups: 10
+      localtime: false
+  file/logs:
+    path: /native-otel/logs.jsonl
+    format: json
+    create_directory: true
+    directory_permissions: "0700"
+    rotation:
+      max_megabytes: 25
+      max_days: 7
+      max_backups: 10
+      localtime: false
 
 service:
   telemetry:
@@ -27,12 +55,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [file/traces]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [file/metrics]
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [debug]
+      exporters: [file/logs]

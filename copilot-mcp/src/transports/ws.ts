@@ -10,13 +10,34 @@ import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { McpServer, Transport, JSONRPCMessage } from '@modelcontextprotocol/server';
 import { isJsonRpcMessage } from '../jsonrpc/types.js';
+import {
+  extractCarrier,
+  runWithPeerRequestContext,
+  sanitizePeerRequestId,
+  type PeerRequestContext,
+} from '../telemetry-context.js';
+
+interface WsServerTransportOptions {
+  transport?: string;
+}
+
+export function extractWsRequestContext(message: JSONRPCMessage): PeerRequestContext {
+  const requestCarrier = extractCarrier((message as { params?: unknown }).params);
+  const context: PeerRequestContext = { requestCarrier };
+  const requestId = sanitizePeerRequestId((message as { id?: unknown }).id);
+  if (requestId !== undefined) context.peerRequestId = requestId;
+  return context;
+}
 
 export class WsServerTransport implements Transport {
   onclose?: (() => void) | undefined;
   onerror?: ((error: Error) => void) | undefined;
   onmessage?: ((message: JSONRPCMessage) => void) | undefined;
 
-  constructor(private readonly ws: WebSocket) {}
+  constructor(
+    private readonly ws: WebSocket,
+    private readonly options: WsServerTransportOptions = {},
+  ) {}
 
   async start(): Promise<void> {
     this.ws.on('message', (data) => {
@@ -31,7 +52,15 @@ export class WsServerTransport implements Transport {
         this.onerror?.(new Error('WS frame is not a JSON-RPC 2.0 message'));
         return;
       }
-      this.onmessage?.(parsed as JSONRPCMessage);
+      const message = parsed as JSONRPCMessage;
+      const context = extractWsRequestContext(message);
+      runWithPeerRequestContext(
+        {
+          ...context,
+          transport: this.options.transport ?? 'ws',
+        },
+        () => this.onmessage?.(message),
+      );
     });
     this.ws.on('close', () => this.onclose?.());
     this.ws.on('error', (error) => this.onerror?.(error));
@@ -66,7 +95,7 @@ export function attachWebSocket(httpServer: HttpServer, opts: AttachWebSocketOpt
     }
     wss.handleUpgrade(request, socket, head, (ws) => {
       const server = opts.buildServer();
-      const transport = new WsServerTransport(ws);
+      const transport = new WsServerTransport(ws, { transport: 'ws' });
       opts.onConnection?.(transport);
       void server.connect(transport).catch((error: unknown) => {
         console.error('[copilot-mcp] WS connect failed:', error);
