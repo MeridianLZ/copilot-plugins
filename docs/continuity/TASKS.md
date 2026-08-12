@@ -1,6 +1,6 @@
 # TASKS
 
-## Current checkpoint — 2026-08-12 14:55 MDT
+## Current checkpoint — 2026-08-12 17:30 MDT
 
 - [x] Audit 25 documents / 769 sections and current replication blockers.
 - [x] Research OTel, GenAI, Copilot, MCP, W3C, and trace UI sources.
@@ -13,17 +13,15 @@
 - [x] Add clickable evidence-detail UI panel (`bbe7ccc`).
 - [x] Add MCP stdio W3C trace-context propagation (`9e8fb8d`).
 - [x] Reconcile native/hook terminal status divergence (`265f6ed`).
-- [ ] Create dedicated canonical conversation identity module with exact-ID
-  join precedence tests (plan Task 2).
-- [ ] Unify emitted/projected hook span contract (plan Task 5).
-- [ ] Full generic multi-section forensic inspector: raw/normalized toggle,
-  attribute namespace search, link click-through, field-accounting counter
-  (plan Task 9, beyond the evidence-detail panel already shipped).
-- [ ] Machine-checked 100% source-field accounting test (plan Task 11).
-- [ ] Fresh live all-lane deployment + `live-validation.md` evidence
-  (plan Task 12).
+- [x] Create canonical identity module and exact-ID join tests.
+- [x] Unify emitted/projected hook span attributes, status, exceptions, and links.
+- [x] Add generic normalized/raw inspector and field-accounting display.
+- [x] Add machine-checked 100% source-field accounting test.
+- [x] Complete fresh live validation and deployment evidence.
 
-The older task sections remain durable history. This checklist is active.
+The older task sections remain durable history. This checklist is complete for
+the planned local deployable scope. Organic subagent/permission events remain
+unobserved in the one-shot and are explicitly documented.
 
 ## Prior checkpoint — 2026-08-10 16:32 MDT
 

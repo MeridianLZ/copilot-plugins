@@ -9,6 +9,7 @@ import { projectNativeConversation, type NativeEvent } from './native-session.js
 import type { CoverageDisposition, CoverageEntry } from './correlation.js';
 import { redactSecrets, truncateUtf8 } from './security.js';
 import { reconcileTerminalStatus } from './terminal-status.js';
+import type { ConversationIdentity } from './conversation-identity.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -62,6 +63,8 @@ export interface ConversationNode {
   reasoning_encrypted?: boolean;
   /** Subagent cross-link: the child's own hook-lane session_id. */
   child_session_id?: string;
+  /** Canonical conversation/telemetry IDs for exact joins and inspection. */
+  identity?: ConversationIdentity;
 }
 
 export interface ConversationDocument {

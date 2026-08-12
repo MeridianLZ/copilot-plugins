@@ -277,6 +277,14 @@ test('source detail endpoint returns full native OTel evidence; summary rows sta
 
     const missingSource = await requestJson(port, 'GET', `/api/sessions/${sessionId}/sources/does-not-exist`);
     assert.equal(missingSource.status, 404);
+
+    const fields = await requestJson(port, 'GET', `/api/sessions/${sessionId}/telemetry-fields`);
+    assert.equal(fields.status, 200);
+    assert.equal(fields.body['complete'], true);
+    assert.equal(Number(fields.body['total']) > 0, true);
+    const fieldRows = fields.body['fields'] as Array<Record<string, unknown>>;
+    assert.equal(fieldRows.some((row) => String(row['path']).startsWith('$.raw_entity')), true);
+    assert.equal(fieldRows.every((row) => typeof row['ui_target'] === 'string'), true);
   } finally {
     await stopBridge(child);
     await rm(runtimeDirectory, { recursive: true, force: true });

@@ -2,6 +2,33 @@
 
 _Newest first._
 
+## 2026-08-12 (final implementation) — lossless lanes, accounting, live validation
+
+- Added canonical identity normalization and exact message/tool/turn/agent/
+  trace-span precedence.
+- Preserved complete sanitized OTLP source line/entity/resource/scope
+  containers, unknown fields, schema URLs, events, links, status, and dropped
+  counts.
+- Added compatibility for real Copilot native file-export `type:"span"` and
+  `type:"metric"` records, direct metric `dataPoints`, and `[seconds,nanos]`
+  timestamps. Unscoped native metrics remain visible in bounded session-time
+  attribution instead of being silently dropped.
+- Added shared hook span attributes/status/exception/link contract and
+  projected span evidence.
+- Added normalized/raw searchable inspector sections and
+  `/telemetry-fields`; fixture/API accounting test passes.
+- Real Copilot session `160e8401-94b0-45c8-b668-505eaddcec5f` produced 2
+  traces, 9 metrics, 20 transcript events, and 5 hook events. A labeled
+  sanitized local log smoke produced the log lane.
+- Final session counts: 44 coverage records; 2,235 / 2,235 fields accounted;
+  `complete: true`; UI `200`.
+- Real MCP stdio subprocess succeeded with `session_create` and valid
+  `params._meta` W3C carrier after setting system `COPILOT_MCP_CLI_PATH`.
+- Fresh bridge gate: **101/101**; MCP gate: **23/23**; typecheck/build pass.
+- Remaining organic subagent, permission-denial, and Copilot-native-log events
+  were not invented; limitation documented in
+  `docs/otel-remediation/live-validation.md`.
+
 ## 2026-08-12 (implementation) — remediation slice: hook overlay, evidence, MCP stdio, status reconciliation
 
 - Implemented and committed 5 real, tested slices of the remediation plan

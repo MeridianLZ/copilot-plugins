@@ -26,6 +26,25 @@ transcript content is richer than hook content, but native IDs, OTel attributes,
 OTel links, and most hook events are not rendered as inspectable conversation
 metadata.
 
+## Remediation status — 2026-08-12
+
+The following review findings are now implemented and verified on the feature
+branch, then merged into `development`:
+
+| Finding | Remediation | Evidence |
+|---|---|---|
+| Native `turnId` / `messageId` / `toolCallId` joins incomplete | `ConversationIdentity` normalizes aliases; exact message/tool/turn/agent/trace-span keys precede FIFO/session fallback | `src/conversation-identity.ts`, `test/conversation-identity.test.ts`, `test/correlation.test.ts` |
+| Native signal/model/usage/attributes/resource/scope metadata dropped | Full sanitized raw record/entity/resource/scope plus normalized identity survives parser, cache, coverage, correlation, and source detail API | `src/native-otel.ts`, `src/coverage.ts`, `test/native-otel.test.ts`, `test/correlation-api.test.ts` |
+| OTel links absent from projection | Projected hook spans now carry links; source detail preserves native raw links; UI exposes link fields in normalized/raw evidence sections | `src/hook-span-contract.ts`, `src/trace-projector.ts`, `ui/index.html` |
+| Native-first overlay hides most hook events | All 14 hook events overlay under selectable chronological governance groups | `src/conversation-projector.ts`, `test/conversation-projector.test.ts` |
+| Native/hook status diverges | `reconcileTerminalStatus()` resolves error > recovered > ok > open and exposes conflict evidence | `src/terminal-status.ts`, `test/terminal-status.test.ts` |
+| MCP stdio propagation lacks coverage | Real stdio subprocess succeeded with valid carrier; per-message transport wrapper and tests cover isolation | `src/transports/stdio-context.ts`, `test/stdio-propagation.test.ts`, `docs/otel-remediation/live-validation.md` |
+| No proof every source field is accounted | `/telemetry-fields` walks every evidence leaf and requires disposition/UI target; live session recorded `2,235 / 2,235` | `src/coverage.ts`, `test/coverage.test.ts`, `docs/otel-remediation/live-validation.md` |
+
+Fresh package gates after remediation: bridge **101/101**, MCP **23/23**,
+typecheck and build pass. Live validation is recorded in
+[`docs/otel-remediation/live-validation.md`](otel-remediation/live-validation.md).
+
 ## Documentation map
 
 ### Copilot implementation research
@@ -420,4 +439,3 @@ live render therefore no longer silently stop at the first 100 events.
 8. Add tests asserting every emitted field has one of:
    `rendered`, `represented`, `redacted`, `unavailable`, `unmatched`,
    `heuristic`, `deduplicated`, `invalid`, or `late_out_of_order`.
-

@@ -7,6 +7,14 @@ import {
   type JsonValue,
   type NormalizedHookPayload
 } from './types.js';
+import { normalizeConversationIdentity } from './conversation-identity.js';
+import {
+  hookPointStatus,
+  hookSpanAttributes,
+  hookSpanEvents,
+  hookSpanLinks,
+  jsonAttributes
+} from './hook-span-contract.js';
 
 /**
  * Pure-data projection of the hook JSONL ledger into session summaries and
@@ -34,6 +42,10 @@ export interface ProjectedSpan {
   agent_name?: string;
   start_event_id: string;
   end_event_id?: string;
+  identity?: import('./conversation-identity.js').ConversationIdentity;
+  attributes?: Record<string, JsonValue>;
+  events?: import('./hook-span-contract.js').HookSpanEvent[];
+  links?: import('./hook-span-contract.js').HookSpanLink[];
 }
 
 export interface SessionSummary {
@@ -186,7 +198,15 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
       ...(parentId ? { parent_id: parentId } : {}),
       start_unix_ms: timeMs,
       status: 'open',
-      start_event_id: envelope.event_id
+      start_event_id: envelope.event_id,
+      identity: normalizeConversationIdentity({
+        ...payload,
+        session_id: sessionId,
+        event_id: envelope.event_id
+      }),
+      attributes: jsonAttributes(hookSpanAttributes(envelope)),
+      events: hookSpanEvents(envelope),
+      links: hookSpanLinks(envelope)
     };
     const toolName = getString(payload, 'tool_name');
     if (kind === 'tool' && toolName !== undefined) span.tool_name = toolName;
@@ -226,8 +246,9 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
     const timeMs = eventTimeMs(envelope);
     let parentId: string | undefined;
     let heuristic = false;
-    let pointStatus: ProjectedStatus = 'ok';
-    let pointMessage: string | undefined;
+    const contractPointStatus = hookPointStatus(event);
+    let pointStatus: ProjectedStatus = contractPointStatus.status;
+    let pointMessage: string | undefined = contractPointStatus.message;
 
     switch (event) {
       case 'sessionStart': {
@@ -338,7 +359,15 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
       status: pointStatus,
       ...(pointMessage !== undefined ? { status_message: pointMessage } : {}),
       ...(heuristic ? { heuristic: true } : {}),
-      start_event_id: envelope.event_id
+      start_event_id: envelope.event_id,
+      identity: normalizeConversationIdentity({
+        ...payload,
+        session_id: sessionId,
+        event_id: envelope.event_id
+      }),
+      attributes: jsonAttributes(hookSpanAttributes(envelope)),
+      events: hookSpanEvents(envelope),
+      links: hookSpanLinks(envelope)
     };
     const toolName = getString(payload, 'tool_name');
     if (toolName !== undefined) point.tool_name = toolName;

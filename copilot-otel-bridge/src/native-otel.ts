@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
 import { open, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { createRedactionDispositionAccumulator, sanitizeNativeOtelValue } from './security.js';
+import {
+  createRedactionDispositionAccumulator,
+  isOpaqueReasoningKey,
+  sanitizeNativeOtelValue
+} from './security.js';
+import { normalizeConversationIdentity } from './conversation-identity.js';
 import type {
   JsonValue,
+  JsonObject,
   NativeOtelRecord,
   NativeSignal,
   RedactionDisposition
@@ -16,6 +22,10 @@ interface CandidateRecord {
   attributes: Record<string, JsonValue>;
   resource: Record<string, JsonValue>;
   instrumentationScope: Record<string, JsonValue>;
+  resourceContainer: Record<string, unknown> | undefined;
+  scopeContainer: Record<string, unknown> | undefined;
+  resourceSchemaUrl: string | undefined;
+  scopeSchemaUrl: string | undefined;
   observedAtUnixMs: number | undefined;
   traceId: string | undefined;
   spanId: string | undefined;
@@ -114,6 +124,13 @@ function parseFiniteNumber(value: unknown): number | undefined {
 }
 
 function parseEpochMs(value: unknown): number | undefined {
+  if (Array.isArray(value) && value.length >= 2) {
+    const seconds = parseFiniteNumber(value[0]);
+    const nanos = parseFiniteNumber(value[1]);
+    if (seconds !== undefined && nanos !== undefined) {
+      return Math.trunc(seconds * 1_000 + nanos / 1_000_000);
+    }
+  }
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed.length === 0) return undefined;
@@ -303,6 +320,10 @@ function inferSignalFromSourceFile(sourceFile: string): NativeSignal {
 function inferSignal(line: Record<string, unknown>, sourceFile: string): NativeSignal {
   const hint = stringField(line, 'signal', 'signal_type');
   if (hint === 'trace' || hint === 'metric' || hint === 'log') return hint;
+  const type = stringField(line, 'type');
+  if (type === 'span') return 'trace';
+  if (type === 'metric') return 'metric';
+  if (type === 'log' || type === 'logRecord' || type === 'log_record') return 'log';
   if (Array.isArray(getField(line, 'resourceSpans', 'resource_spans'))) return 'trace';
   if (Array.isArray(getField(line, 'resourceMetrics', 'resource_metrics'))) return 'metric';
   if (Array.isArray(getField(line, 'resourceLogs', 'resource_logs'))) return 'log';
@@ -321,8 +342,12 @@ function extractObservedAtUnixMs(...objects: ReadonlyArray<Record<string, unknow
     'time_unix_nano',
     'startTimeUnixNano',
     'start_time_unix_nano',
+    'startTime',
+    'start_time',
     'endTimeUnixNano',
     'end_time_unix_nano',
+    'endTime',
+    'end_time',
     'timestamp'
   ];
   for (const object of objects) {
@@ -364,6 +389,10 @@ function parseTraceCandidates(line: Record<string, unknown>): CandidateRecord[] 
           attributes,
           resource,
           instrumentationScope,
+          resourceContainer: recordField(resourceSpanCandidate, 'resource'),
+          scopeContainer: recordField(scopeSpanCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+          resourceSchemaUrl: stringField(resourceSpanCandidate, 'schemaUrl', 'schema_url'),
+          scopeSchemaUrl: stringField(scopeSpanCandidate, 'schemaUrl', 'schema_url'),
           observedAtUnixMs: extractObservedAtUnixMs(spanCandidate, scopeSpanCandidate, resourceSpanCandidate, line),
           traceId: stringField(spanCandidate, 'traceId', 'trace_id'),
           spanId: stringField(spanCandidate, 'spanId', 'span_id'),
@@ -377,6 +406,9 @@ function parseTraceCandidates(line: Record<string, unknown>): CandidateRecord[] 
 
 function collectMetricPoints(metric: Record<string, unknown>): { kind: string; point: Record<string, unknown> }[] {
   const output: { kind: string; point: Record<string, unknown> }[] = [];
+  for (const point of arrayField(metric, 'dataPoints', 'data_points')) {
+    if (isRecord(point)) output.push({ kind: 'data_point', point });
+  }
   const containers: Array<[string, Record<string, unknown> | undefined]> = [
     ['sum', recordField(metric, 'sum')],
     ['gauge', recordField(metric, 'gauge')],
@@ -427,6 +459,10 @@ function parseMetricCandidates(line: Record<string, unknown>): CandidateRecord[]
             attributes,
             resource,
             instrumentationScope,
+            resourceContainer: recordField(resourceMetricCandidate, 'resource'),
+            scopeContainer: recordField(scopeMetricCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+            resourceSchemaUrl: stringField(resourceMetricCandidate, 'schemaUrl', 'schema_url'),
+            scopeSchemaUrl: stringField(scopeMetricCandidate, 'schemaUrl', 'schema_url'),
             observedAtUnixMs: extractObservedAtUnixMs(metricCandidate, scopeMetricCandidate, resourceMetricCandidate, line),
             traceId: undefined,
             spanId: undefined,
@@ -450,6 +486,10 @@ function parseMetricCandidates(line: Record<string, unknown>): CandidateRecord[]
             attributes,
             resource,
             instrumentationScope,
+            resourceContainer: recordField(resourceMetricCandidate, 'resource'),
+            scopeContainer: recordField(scopeMetricCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+            resourceSchemaUrl: stringField(resourceMetricCandidate, 'schemaUrl', 'schema_url'),
+            scopeSchemaUrl: stringField(scopeMetricCandidate, 'schemaUrl', 'schema_url'),
             observedAtUnixMs: extractObservedAtUnixMs(item.point, metricCandidate, scopeMetricCandidate, resourceMetricCandidate, line),
             traceId: undefined,
             spanId: undefined,
@@ -492,6 +532,10 @@ function parseLogCandidates(line: Record<string, unknown>): CandidateRecord[] {
           attributes,
           resource,
           instrumentationScope,
+          resourceContainer: recordField(resourceLogCandidate, 'resource'),
+          scopeContainer: recordField(scopeLogCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+          resourceSchemaUrl: stringField(resourceLogCandidate, 'schemaUrl', 'schema_url'),
+          scopeSchemaUrl: stringField(scopeLogCandidate, 'schemaUrl', 'schema_url'),
           observedAtUnixMs: extractObservedAtUnixMs(logRecordCandidate, scopeLogCandidate, resourceLogCandidate, line),
           traceId: stringField(logRecordCandidate, 'traceId', 'trace_id'),
           spanId: stringField(logRecordCandidate, 'spanId', 'span_id'),
@@ -504,7 +548,16 @@ function parseLogCandidates(line: Record<string, unknown>): CandidateRecord[] {
 }
 
 function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown>): CandidateRecord {
-  const attributes = attributesToMap(getField(line, 'attributes'));
+  const directPoint = arrayField(line, 'dataPoints', 'data_points')
+    .find((value): value is Record<string, unknown> => isRecord(value));
+  const attributes = mergeMaps(
+    attributesToMap(getField(line, 'attributes')),
+    directPoint ? attributesToMap(getField(directPoint, 'attributes')) : {}
+  );
+  const metricName = stringField(line, 'name');
+  const metricUnit = stringField(line, 'unit');
+  if (signal === 'metric' && metricName !== undefined) attributes['metric.name'] = metricName;
+  if (signal === 'metric' && metricUnit !== undefined) attributes['metric.unit'] = metricUnit;
   const resource = resourceToMap(getField(line, 'resource'));
   const instrumentationScope = scopeToMap(
     getField(line, 'instrumentationScope', 'instrumentation_scope', 'scope')
@@ -514,11 +567,15 @@ function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown
   return {
     signal,
     line,
-    entity: line,
+    entity: directPoint ?? line,
     attributes,
     resource,
     instrumentationScope,
-    observedAtUnixMs: extractObservedAtUnixMs(line),
+    resourceContainer: recordField(line, 'resource'),
+    scopeContainer: recordField(line, 'instrumentationScope', 'instrumentation_scope', 'scope'),
+    resourceSchemaUrl: stringField(line, 'resourceSchemaUrl', 'resource_schema_url'),
+    scopeSchemaUrl: stringField(line, 'scopeSchemaUrl', 'scope_schema_url'),
+    observedAtUnixMs: extractObservedAtUnixMs(directPoint ?? line, line),
     traceId: stringField(line, 'traceId', 'trace_id'),
     spanId: stringField(line, 'spanId', 'span_id'),
     parentSpanId: stringField(line, 'parentSpanId', 'parent_span_id')
@@ -533,6 +590,43 @@ function sanitizeRecordMap(
   const sanitized = sanitizeNativeOtelValue(keyPath, input, disposition);
   if (isRecord(sanitized)) return sanitized as Record<string, JsonValue>;
   return {};
+}
+
+function sanitizeRawObject(
+  input: Record<string, unknown> | undefined,
+  keyPath: string,
+  disposition: RedactionDisposition
+): JsonObject | undefined {
+  if (input === undefined) return undefined;
+  const converted = toJsonValue(input);
+  const sanitized = sanitizeNativeOtelValue(keyPath, converted, disposition);
+  return isRecord(sanitized) ? redactOtlpKeyValueArrays(sanitized as JsonObject, disposition) : undefined;
+}
+
+function redactOtlpKeyValueArrays(value: JsonObject, disposition: RedactionDisposition): JsonObject {
+  const output: JsonObject = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (Array.isArray(child)) {
+      output[key] = child.map((entry) => {
+        if (!isRecord(entry)) return entry;
+        const attributeKey = entry['key'];
+        if (typeof attributeKey === 'string' && isOpaqueReasoningKey(attributeKey) && entry['value'] !== undefined) {
+          const redacted = sanitizeNativeOtelValue(
+            attributeKey,
+            '[REDACTED_reasoning_ciphertext]',
+            disposition
+          );
+          return { ...entry, value: redacted };
+        }
+        return isRecord(entry) ? redactOtlpKeyValueArrays(entry, disposition) : entry;
+      });
+      continue;
+    }
+    output[key] = isRecord(child)
+      ? redactOtlpKeyValueArrays(child, disposition)
+      : child;
+  }
+  return output;
 }
 
 function usageKeyFromNormalized(normalized: string): string | undefined {
@@ -676,15 +770,28 @@ function normalizeCandidate(
   const attributes = sanitizeRecordMap(candidate.attributes, 'attributes', disposition);
   const resource = sanitizeRecordMap(candidate.resource, 'resource', disposition);
   const instrumentationScope = sanitizeRecordMap(candidate.instrumentationScope, 'instrumentation_scope', disposition);
+  const rawRecord = sanitizeRawObject(candidate.line, 'raw_record', disposition);
+  const rawEntity = sanitizeRawObject(candidate.entity, 'raw_entity', disposition);
+  const rawResource = sanitizeRawObject(candidate.resourceContainer, 'raw_resource', disposition);
+  const rawScope = sanitizeRawObject(candidate.scopeContainer, 'raw_scope', disposition);
   const lookup = buildLookup(attributes, resource, instrumentationScope, candidate.line, candidate.entity);
   const usage = extractUsage(lookup, candidate.line, candidate.entity);
+  const identity = normalizeConversationIdentity({
+    ...candidate.line,
+    ...candidate.entity,
+    ...attributes,
+    ...resource,
+    ...instrumentationScope
+  });
 
   const sessionId = extractStringFromLookupOrObject(lookup, candidate.entity, candidate.line, [
     'session_id',
     'session.id',
     'copilot.session.id',
     'github.copilot.session_id',
-    'github.copilot.session.id'
+    'github.copilot.session.id',
+    'gen_ai.conversation.id',
+    'conversation.id'
   ]);
   const turnId = extractStringFromLookupOrObject(lookup, candidate.entity, candidate.line, [
     'turn_id',
@@ -728,6 +835,13 @@ function normalizeCandidate(
     attributes,
     resource,
     instrumentation_scope: instrumentationScope,
+    ...(Object.keys(identity).length > 0 ? { identity } : {}),
+    ...(rawRecord !== undefined ? { raw_record: rawRecord } : {}),
+    ...(rawEntity !== undefined ? { raw_entity: rawEntity } : {}),
+    ...(rawResource !== undefined ? { raw_resource: rawResource } : {}),
+    ...(rawScope !== undefined ? { raw_scope: rawScope } : {}),
+    ...(candidate.resourceSchemaUrl !== undefined ? { raw_resource_schema_url: candidate.resourceSchemaUrl } : {}),
+    ...(candidate.scopeSchemaUrl !== undefined ? { raw_scope_schema_url: candidate.scopeSchemaUrl } : {}),
     content_disposition: disposition,
     validity: 'valid',
     source_hash: sourceHash

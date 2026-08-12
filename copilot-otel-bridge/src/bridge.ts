@@ -15,7 +15,12 @@ import { listNativeSessions } from './native-session-listing.js';
 import type { NativeEvent } from './native-session.js';
 import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { correlateSources, type CoverageEntry } from './correlation.js';
-import { buildSourceRecords, summarizeCoverage, type CoverageTotals } from './coverage.js';
+import {
+  buildSourceRecords,
+  buildTelemetryFieldAccounting,
+  summarizeCoverage,
+  type CoverageTotals
+} from './coverage.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
 import { etagFor, etagsMatch, pageSlice } from './api-contract.js';
 
@@ -185,7 +190,21 @@ async function main(): Promise<void> {
   }> => {
     const trace = projectSessionTrace(ledger, sessionId);
     const nativeEvents = providedNativeEvents ?? await nativeCache.getNativeEvents(sessionId);
-    const nativeOtelRecords = (await nativeOtelCache.getRecords()).filter((record) => record.session_id === sessionId);
+    const sessionTimes = [
+      ...trace.events.map((event) => eventTimeMs(event)),
+      ...nativeEvents.map((event) => Date.parse(event.timestamp))
+    ].filter((time) => Number.isFinite(time));
+    // Copilot native metric aggregates can begin before the first hook event
+    // and end after the final event. Keep a bounded five-minute attribution
+    // window for records without a conversation ID; exact-ID records remain
+    // authoritative and are never broadened.
+    const sessionStart = sessionTimes.length > 0 ? Math.min(...sessionTimes) - 300_000 : undefined;
+    const sessionEnd = sessionTimes.length > 0 ? Math.max(...sessionTimes) + 300_000 : undefined;
+    const nativeOtelRecords = (await nativeOtelCache.getRecords()).filter((record) => {
+      if (record.session_id === sessionId) return true;
+      if (record.session_id !== undefined || sessionStart === undefined || sessionEnd === undefined) return false;
+      return record.observed_at_unix_ms >= sessionStart && record.observed_at_unix_ms <= sessionEnd;
+    });
     const records = buildSourceRecords({
       sessionId,
       hooks: trace.events,
@@ -256,10 +275,11 @@ async function main(): Promise<void> {
         const nativeOtelMatch = /^(.*)\/native-otel$/.exec(remainder);
         const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
         const coverageMatch = /^(.*)\/coverage$/.exec(remainder);
+        const fieldsMatch = /^(.*)\/telemetry-fields$/.exec(remainder);
         const sourceDetailMatch = /^(.*)\/sources\/(.+)$/.exec(remainder);
         const sourcesMatch = sourceDetailMatch ? null : /^(.*)\/sources$/.exec(remainder);
         const sessionId =
-          nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? sourceDetailMatch?.[1] ?? sourcesMatch?.[1] ?? remainder;
+          nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? fieldsMatch?.[1] ?? sourceDetailMatch?.[1] ?? sourcesMatch?.[1] ?? remainder;
         const ledger = await readLedger(config.eventsFile);
         if (nativeOtelMatch) {
           const records = (await nativeOtelCache.getRecords())
@@ -311,6 +331,25 @@ async function main(): Promise<void> {
             // Full sanitized evidence lives only in the detail response — the
             // paginated summary rows stay small so they never balloon.
             evidence: entry.evidence ?? null
+          };
+          sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
+          return;
+        }
+        if (fieldsMatch) {
+          const coverage = await buildSessionCoverage(sessionId, ledger);
+          if (!coverage.known) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const fields = buildTelemetryFieldAccounting(coverage.entries);
+          const accounted = fields.filter((field) => field.disposition !== 'unavailable').length;
+          const body = {
+            session_id: sessionId,
+            fields,
+            total: fields.length,
+            accounted,
+            complete: accounted === fields.length,
+            generated_at: new Date().toISOString()
           };
           sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
           return;

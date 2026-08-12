@@ -11,9 +11,8 @@ import {
 } from '@opentelemetry/api';
 import type { BridgeConfig } from './config.js';
 import { contextFromSpan, contextFromSpanContext, linkFromSpanContext, parseTraceparent, startPointSpan } from './otel.js';
-import { flattenAttributes } from './security.js';
+import { hookLifecycleAttributes, hookPointStatus, hookSpanAttributes } from './hook-span-contract.js';
 import {
-  getBoolean,
   getObject,
   getString,
   type CopilotHookEventName,
@@ -69,10 +68,11 @@ function appendLink(links: Link[], context: SpanContext | undefined, attributes:
 }
 
 function eventStatus(event: CopilotHookEventName): { code: number; message?: string } | undefined {
-  if (event === 'postToolUseFailure' || event === 'errorOccurred') {
+  const status = hookPointStatus(event);
+  if (status.status === 'error') {
     return { code: SpanStatusCode.ERROR, message: event };
   }
-  if (event === 'postToolUse' || event === 'agentStop' || event === 'subagentStop' || event === 'sessionEnd') {
+  if (status.status === 'ok') {
     return { code: SpanStatusCode.OK };
   }
   return undefined;
@@ -86,58 +86,7 @@ function errorMessage(payload: NormalizedHookPayload): string | undefined {
 }
 
 function coreAttributes(envelope: HookEnvelope): Attributes {
-  const payload = envelope.payload;
-  const attributes: Attributes = {
-    'github.copilot.hook.event.name': payload.hook_event_name,
-    'github.copilot.hook.event.id': envelope.event_id,
-    'github.copilot.hook.source': envelope.source,
-    'github.copilot.hook.payload_format': payload.payload_format,
-    'github.copilot.hook.schema_version': envelope.schema_version,
-    'github.copilot.hook.observed_at_unix_ms': envelope.observed_at_unix_ms,
-    'github.copilot.session.id': payload.session_id,
-    'gen_ai.conversation.id': payload.session_id
-  };
-
-  const strings: readonly [string, string][] = [
-    ['cwd', 'github.copilot.cwd'],
-    ['source', 'github.copilot.session.source'],
-    ['reason', 'github.copilot.session.end_reason'],
-    ['tool_name', 'gen_ai.tool.name'],
-    ['transcript_path', 'github.copilot.transcript.path'],
-    ['stop_reason', 'github.copilot.stop.reason'],
-    ['agent_id', 'gen_ai.agent.id'],
-    ['agent_type', 'github.copilot.agent.type'],
-    ['agent_name', 'gen_ai.agent.name'],
-    ['agent_display_name', 'github.copilot.agent.display_name'],
-    ['error_context', 'github.copilot.error.context'],
-    ['trigger', 'github.copilot.compaction.trigger'],
-    ['notification_type', 'github.copilot.notification.type'],
-    ['error_type', 'error.type']
-  ];
-  for (const [input, output] of strings) {
-    const value = getString(payload, input);
-    if (value !== undefined) attributes[output] = value;
-  }
-
-  const booleans: readonly [string, string][] = [
-    ['recoverable', 'github.copilot.error.recoverable'],
-    ['stop_hook_active', 'github.copilot.stop_hook_active']
-  ];
-  for (const [input, output] of booleans) {
-    const value = getBoolean(payload, input);
-    if (value !== undefined) attributes[output] = value;
-  }
-
-  const toolResult = getObject(payload, 'tool_result');
-  if (toolResult) {
-    const resultType = getString(toolResult, 'resultType') ?? getString(toolResult, 'result_type');
-    if (resultType) attributes['github.copilot.tool.result_type'] = resultType;
-  }
-
-  return {
-    ...attributes,
-    ...flattenAttributes(payload, 'github.copilot.hook.payload', 3, 96)
-  };
+  return hookSpanAttributes(envelope) as Attributes;
 }
 
 function lifecycleAttributes(
@@ -145,12 +94,7 @@ function lifecycleAttributes(
   kind: OpenSpanRecord['kind'],
   correlationKey: string
 ): Attributes {
-  return {
-    ...coreAttributes(envelope),
-    'github.copilot.hook.lifecycle.kind': kind,
-    'github.copilot.hook.lifecycle.correlation_key': correlationKey,
-    'github.copilot.hook.lifecycle.start_event': envelope.payload.hook_event_name
-  };
+  return hookLifecycleAttributes(envelope, kind, correlationKey) as Attributes;
 }
 
 function toolQueueKey(payload: NormalizedHookPayload): string {

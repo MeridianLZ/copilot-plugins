@@ -9,6 +9,22 @@ This diagram maps the merged Copilot OTel implementation. It distinguishes:
 - **MCP propagation** and peer-session linkage.
 - **Conversation and UI analogs** for each source.
 
+The remediation adds a lossless evidence path and canonical identity layer:
+
+```mermaid
+flowchart LR
+  L["Native traces / metrics / logs<br/>Hook events / transcript / MCP"] --> N["Sanitize once<br/>preserve raw entity + container"]
+  N --> I["ConversationIdentity<br/>session turn message tool agent trace span request"]
+  I --> C["Exact-ID correlation<br/>FIFO only as explicit heuristic"]
+  C --> A["Field accounting<br/>disposition + UI target for every leaf"]
+  C --> P["Conversation + projected span overlays"]
+  A --> D["Paginated source summary"]
+  P --> D2["Selectable transcript / waterfall"]
+  D --> X["Lazy detail API"]
+  D2 --> X
+  X --> U["Normalized sections + raw sanitized inspector"]
+```
+
 ```mermaid
 flowchart LR
   subgraph INPUT["Input lanes"]
