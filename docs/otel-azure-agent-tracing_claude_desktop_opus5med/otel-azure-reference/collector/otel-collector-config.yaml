@@ -1,0 +1,192 @@
+# Self-hosted OpenTelemetry Collector — Phase 1.
+#
+# Everything routes through here. No service talks to a vendor directly. That is
+# what buys you neutrality: the day you add or swap a backend, you edit this
+# file and restart one container, not every service.
+#
+# Requires Collector v0.132.0+ if you enable the Azure Monitor leg (the Azure
+# Authentication extension landed there).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 16
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # ---------------------------------------------------------------- hygiene
+  memory_limiter:
+    # MUST be first in every pipeline. Without it a traffic spike ODs the
+    # Collector and you lose telemetry exactly when you need it.
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # ---------------------------------------------------------------- noise
+  filter/healthchecks:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["url.path"] == "/health"'
+        - 'attributes["url.path"] == "/ready"'
+        - 'attributes["url.path"] == "/alive"'
+        - 'attributes["url.path"] == "/metrics"'
+
+  # ---------------------------------------------------------------- safety net
+  # Second line of defence behind ContentGuardProcessor. The app-side guard can
+  # be misconfigured; this one is operated by whoever owns the Collector.
+  transform/scrub:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          # Card numbers
+          - replace_pattern(attributes["db.query.text"], "\\b(?:\\d[ -]*?){13,19}\\b", "[REDACTED:PAN]")
+          - replace_pattern(attributes["acme.gen_ai.prompt.content"], "\\b(?:\\d[ -]*?){13,19}\\b", "[REDACTED:PAN]")
+          - replace_pattern(attributes["acme.gen_ai.completion.content"], "\\b(?:\\d[ -]*?){13,19}\\b", "[REDACTED:PAN]")
+          # Query-string secrets
+          - replace_pattern(attributes["url.full"], "(?i)(sig|key|token|password)=[^&]*", "$$1=[REDACTED]")
+          # Never let an Authorization header through, whatever emitted it
+          - delete_key(attributes, "http.request.header.authorization")
+          - delete_key(attributes, "http.request.header.x-api-key")
+
+  # ---------------------------------------------------------------- enrichment
+  resource/env:
+    attributes:
+      - key: collector.name
+        value: "primary"
+        action: upsert
+
+  # ---------------------------------------------------------------- sampling
+  # This is the whole reason head sampling stays at 1.0 in the SDK. A head
+  # sampler decides before the trace exists, so it cannot know the trace
+  # errored or was slow — which are the only two traces anyone ever asks for.
+  tail_sampling:
+    # Hold traces this long before deciding. Must exceed your p99 trace
+    # duration or you will decide on incomplete traces. Durable Functions
+    # orchestrations run for hours — those are handled by the
+    # always-keep-workflow policy below rather than by waiting.
+    decision_wait: 30s
+    num_traces: 100000
+    expected_new_traces_per_sec: 500
+    policies:
+      # 1. Every error, always.
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+
+      # 2. Every slow trace, always.
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+
+      # 3. Every agent session, always. These are the product's raw material —
+      #    a sampled-away session is an unreplayable session.
+      - name: agent-sessions
+        type: string_attribute
+        string_attribute:
+          key: gen_ai.operation.name
+          values: [invoke_agent, execute_tool, invoke_workflow]
+          enabled_regex_matching: false
+
+      # 4. Every unobserved hosted-MCP tool call, so the blind-spot ratio
+      #    metric is computed on complete data rather than a 5% sample.
+      - name: unobserved-tools
+        type: boolean_attribute
+        boolean_attribute:
+          key: acme.tool.unobserved
+          value: true
+
+      # 5. Anything that touched money. Adjust the key to your domain.
+      - name: financial-operations
+        type: string_attribute
+        string_attribute:
+          key: acme.operation.class
+          values: [payment, transfer, settlement, ledger]
+
+      # 6. The boring remainder.
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
+
+  # ---------------------------------------------------------------- metrics
+  # Azure Monitor's metric experiences require delta temporality and
+  # exponential histograms. Our .NET SDK already emits delta, but anything
+  # else in the estate (a Python worker, a third-party exporter) may not.
+  cumulativetodelta:
+    include:
+      match_type: regexp
+      metrics: [".*"]
+
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+exporters:
+  # ---- Phase 1: local, no egress ----
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+  debug:
+    verbosity: normal
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+  # ---- Phase 2: enable when egress is approved ----
+  # Uncomment and set APPLICATIONINSIGHTS_CONNECTION_STRING. Note that the
+  # Azure Monitor exporter discards all resource attributes except cloud role
+  # and role instance — if you depend on richer resource attributes for
+  # correlation, keep a parallel OTLP leg to a backend that preserves them.
+  #
+  # azuremonitor:
+  #   connection_string: "${env:APPLICATIONINSIGHTS_CONNECTION_STRING}"
+  #   maxbatchsize: 1024
+  #   maxbatchinterval: 10s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, zpages]
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: detailed
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors:
+        - memory_limiter
+        - filter/healthchecks
+        - transform/scrub
+        - resource/env
+        - tail_sampling
+        - batch
+      exporters: [otlp/jaeger]
+      # Phase 2: exporters: [otlp/jaeger, azuremonitor]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, cumulativetodelta, resource/env, batch]
+      exporters: [prometheus]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/scrub, resource/env, batch]
+      exporters: [debug]

@@ -1,0 +1,82 @@
+# Local observability stack. Phase 1: nothing leaves the machine.
+#
+#   docker compose -f compose.yml up -d
+#
+# Point services at OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+
+name: acme-otel
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+      - "8889:8889"    # Prometheus scrape
+      - "13133:13133"  # health
+      - "55679:55679"  # zpages — the first place to look when spans vanish
+    environment:
+      # Phase 2 only. Left unset so the azuremonitor exporter stays commented out.
+      APPLICATIONINSIGHTS_CONNECTION_STRING: ""
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:13133/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      jaeger:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.66
+    container_name: jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # UI
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: "badger"
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: "/badger/data"
+      BADGER_DIRECTORY_KEY: "/badger/key"
+    volumes:
+      - jaeger-data:/badger
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  # Aspire Dashboard as a second opinion. It renders GenAI spans more
+  # legibly than Jaeger does, and it is the same UI you get in local dev.
+  # OTLP is on 18889/18890 inside the container — 18888 is the UI, and
+  # pointing an exporter at 18888 is the single most common "nothing appears"
+  # cause.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.5
+    container_name: aspire-dashboard
+    restart: unless-stopped
+    ports:
+      - "18888:18888"  # UI
+      - "4319:18889"   # OTLP gRPC (note the host-side remap)
+    environment:
+      DASHBOARD__OTLP__AUTHMODE: "ApiKey"
+      DASHBOARD__OTLP__PRIMARYAPIKEY: "local-dev-key"
+
+volumes:
+  jaeger-data:
+  prometheus-data:
