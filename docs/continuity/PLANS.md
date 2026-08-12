@@ -1,6 +1,37 @@
 # PLANS
 
-## Current status — 2026-08-10 16:32 MDT
+## Current status — 2026-08-12 14:15 MDT
+
+Planning for complete Copilot telemetry replication is complete.
+
+Authoritative plan:
+
+`docs/superpowers/plans/2026-08-12-complete-copilot-telemetry-replication-remediation.md`
+
+Research bibliography:
+
+`docs/otel-remediation/2026-08-12-annotated-bibliography.md`
+
+The plan is copied byte-for-byte from the session plan. Architecture preserves
+one complete sanitized evidence object per source record, carries canonical
+identity and evidence references through correlation/projection, and
+lazy-loads full detail in the UI. It does not replace working ingestion or
+transcript projection.
+
+Critical path:
+
+1. Freeze field and deployment contract.
+2. Add canonical identity and lossless OTLP evidence.
+3. Make correlation, hook span projection, and status reduction lossless.
+4. Project all 14 hook events and OTel links.
+5. Add evidence/detail/accounting APIs and complete inspector.
+6. Add MCP stdio trace-context propagation.
+7. Prove 100% field accounting and run live all-lane deployment.
+
+Planning confidence: 93%. Main bounded uncertainty: MCP SDK access to raw
+stdio request `_meta`; plan includes an early proof gate and fallback.
+
+## Prior status — 2026-08-10 16:32 MDT
 
 The staged implementation has completed the security/runtime, native OTel,
 Collector/API, coverage/correlation, and MCP propagation slices. Current

@@ -256,8 +256,10 @@ async function main(): Promise<void> {
         const nativeOtelMatch = /^(.*)\/native-otel$/.exec(remainder);
         const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
         const coverageMatch = /^(.*)\/coverage$/.exec(remainder);
-        const sourcesMatch = /^(.*)\/sources$/.exec(remainder);
-        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? sourcesMatch?.[1] ?? remainder;
+        const sourceDetailMatch = /^(.*)\/sources\/(.+)$/.exec(remainder);
+        const sourcesMatch = sourceDetailMatch ? null : /^(.*)\/sources$/.exec(remainder);
+        const sessionId =
+          nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? sourceDetailMatch?.[1] ?? sourcesMatch?.[1] ?? remainder;
         const ledger = await readLedger(config.eventsFile);
         if (nativeOtelMatch) {
           const records = (await nativeOtelCache.getRecords())
@@ -280,18 +282,55 @@ async function main(): Promise<void> {
           sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
           return;
         }
+        if (sourceDetailMatch) {
+          const requestedSourceId = sourceDetailMatch[2] ?? '';
+          const coverage = await buildSessionCoverage(sessionId, ledger);
+          if (!coverage.known) {
+            sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
+            return;
+          }
+          const entry = coverage.entries.find((candidate) => candidate.source_id === requestedSourceId);
+          if (!entry) {
+            sendJson(response, 404, { error: 'source_not_found', session_id: sessionId, source_id: requestedSourceId });
+            return;
+          }
+          const body = {
+            session_id: sessionId,
+            source_id: entry.source_id,
+            disposition: entry.disposition,
+            source_kind: entry.source_kind,
+            match_method: entry.matched_by ?? 'session_id',
+            reason: entry.reason,
+            related_ids: entry.related_ids,
+            ...(entry.canonical_id !== undefined ? { canonical_id: entry.canonical_id } : {}),
+            ...(entry.trace_id !== undefined ? { trace_id: entry.trace_id } : {}),
+            ...(entry.span_id !== undefined ? { span_id: entry.span_id } : {}),
+            ...(entry.turn_id !== undefined ? { turn_id: entry.turn_id } : {}),
+            ...(entry.tool_call_id !== undefined ? { tool_call_id: entry.tool_call_id } : {}),
+            timestamp_ms: entry.timestamp_ms,
+            // Full sanitized evidence lives only in the detail response — the
+            // paginated summary rows stay small so they never balloon.
+            evidence: entry.evidence ?? null
+          };
+          sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
+          return;
+        }
         if (coverageMatch || sourcesMatch) {
           const coverage = await buildSessionCoverage(sessionId, ledger);
           if (!coverage.known) {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;
           }
-          const records = coverage.entries.map((entry) => ({
-            ...entry,
-            kind: entry.source_kind,
-            match_method: entry.matched_by ?? 'session_id',
-            summary: entry.reason
-          }));
+          const records = coverage.entries.map((entry) => {
+            const { evidence, ...rest } = entry;
+            return {
+              ...rest,
+              kind: entry.source_kind,
+              match_method: entry.matched_by ?? 'session_id',
+              summary: entry.reason,
+              has_evidence: evidence !== undefined
+            };
+          });
           if (sourcesMatch) {
             const kind = url.searchParams.get('kind');
             if (kind !== null && !['hook', 'native_transcript', 'native_otel', 'mcp', 'evidence'].includes(kind)) {
@@ -305,7 +344,7 @@ async function main(): Promise<void> {
           }
           const body = {
             session_id: sessionId,
-            entries: coverage.entries,
+            entries: records,
             records,
             totals: coverage.totals,
             total: coverage.totals.total,

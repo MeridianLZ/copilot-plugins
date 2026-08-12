@@ -2,6 +2,63 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-12 (implementation) — remediation slice facts
+
+- **Fact:** `serveStdio()` from `@modelcontextprotocol/server/stdio` accepts
+  a `transport` option (bring-your-own-transport) — this is how per-message
+  W3C trace-context propagation was added to stdio without any custom wire
+  field: `ContextPropagatingStdioTransport` wraps `StdioServerTransport`,
+  intercepts `onmessage`, extracts `params._meta`, and scopes it with
+  `AsyncLocalStorage` via `runWithPeerRequestContext()` before forwarding to
+  the real handler. Verified end-to-end with a fake inner `Transport` (no
+  real streams needed) proving per-message scoping does not leak between
+  calls on the same pinned connection.
+- **Pitfall (found and fixed):** `ConversationDocument.status` was computed
+  as `root.status ?? sessionSpan?.status ?? 'open'` — since `root.status`
+  (native) starts as the literal string `'open'` (not `undefined`), `??`
+  never fell through to the hook lane's status even when hooks closed
+  cleanly and native never got `session.shutdown`. Any reducer over two
+  optional-but-string-typed status sources must treat non-terminal states
+  (`'open'`) as "no explicit evidence", not skip via `??`/`||` alone.
+- **Invariant:** `SourceRecord.evidence` (added this session) carries the
+  full sanitized native OTel record through `buildSourceRecords()` →
+  `correlateSources()` unchanged; it must never appear in paginated
+  `/sources` or `/coverage` summary rows (`has_evidence` flag only) —
+  only `GET /api/sessions/:id/sources/:sourceId` returns the full blob.
+- **Invariant:** All 14 hook events overlay in native-first conversation
+  projection now, nested under one `governance` `ConversationNodeKind`
+  child per turn/session host (not flat siblings of user/assistant
+  bubbles) — every event stays individually selectable and chronological.
+- **Test-count facts:** `copilot-otel-bridge` gate is now **91** node:test
+  cases (was 82); `copilot-mcp` gate is now **23** (was 18).
+
+## 2026-08-12 — lossless telemetry remediation invariants
+
+- **Invariant:** Every supported telemetry source field must end with one
+  explicit disposition: rendered, represented, redacted, unavailable,
+  unmatched, heuristic, deduplicated, invalid, or late-out-of-order.
+- **Invariant:** Preserve one complete sanitized evidence object. Correlation
+  and conversation projections carry stable references and summaries; they do
+  not copy or reduce source truth.
+- **Invariant:** Exact canonical IDs precede timestamps/FIFO:
+  session, turn, message, tool call, agent, trace/span, hook event, and MCP
+  request. Conflicting exact IDs remain explicit conflicts.
+- **Invariant:** OTLP completeness includes resource and scope containers/schema
+  URLs, span intrinsics, attributes, events, links, status, trace state, flags,
+  and every dropped count. Unknown future fields survive sanitization.
+- **Invariant:** Native transcript remains verbatim/ordering authority; native
+  OTel remains execution/identity/model/usage authority; hooks remain
+  governance/lifecycle authority.
+- **Invariant:** All 14 hook events remain selectable in native-first
+  projection, even when visually grouped to avoid clutter.
+- **Fact:** Official GenAI semantic conventions moved to
+  `open-telemetry/semantic-conventions-genai`; old core registry entries are
+  migration/deprecation markers, not instructions to discard emitted fields.
+- **Fact:** MCP stdio has no header channel. Trace context must be validated
+  from per-request JSON-RPC metadata; stdout must remain protocol-only.
+- **Fact:** `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` remains
+  required for requested local forensic capture and increases privacy risk.
+
 ## 2026-08-10 — MCP propagation checkpoint
 
 - **Fact:** MCP propagation is committed through `24a1b40`; W3C carriers cross

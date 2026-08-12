@@ -8,6 +8,7 @@ import {
 import { projectNativeConversation, type NativeEvent } from './native-session.js';
 import type { CoverageDisposition, CoverageEntry } from './correlation.js';
 import { redactSecrets, truncateUtf8 } from './security.js';
+import { reconcileTerminalStatus } from './terminal-status.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -26,7 +27,8 @@ export type ConversationNodeKind =
   | 'turn'
   | 'tool'
   | 'subagent'
-  | 'event';
+  | 'event'
+  | 'governance';
 
 export interface ConversationContent {
   role: 'user' | 'agent' | 'system' | 'tool' | 'meta';
@@ -70,6 +72,14 @@ export interface ConversationDocument {
   session_id: string;
   generated_at: string;
   status: ProjectedStatus;
+  /**
+   * True when native transcript status and hook lifecycle status disagreed
+   * and had to be reconciled (see terminal-status.ts). Absent/false means
+   * both lanes agreed or only one lane had an explicit terminal signal.
+   */
+  status_conflict?: boolean;
+  /** Every explicit (non-'open') terminal status observation that fed `status`. */
+  status_evidence?: Array<{ source: 'native' | 'hook'; status: ProjectedStatus; reason?: string }>;
   end_reason?: string;
   cwd?: string;
   started_at_ms: number;
@@ -329,9 +339,34 @@ function attachCoverageGapNodes(root: ConversationNode, entries: readonly Covera
   root.children.sort((left, right) => left.timestamp_ms - right.timestamp_ms);
 }
 
-/** Hook events worth overlaying on a native-first tree: signals the native
- * stream does not carry (or carries less directly). */
-const OVERLAY_EVENTS = new Set<CopilotHookEventName>(['errorOccurred', 'preCompact', 'notification', 'postToolUseFailure']);
+/** Hook events that always render as errors regardless of overlay grouping. */
+const ERROR_OVERLAY_EVENTS = new Set<CopilotHookEventName>(['errorOccurred', 'postToolUseFailure']);
+
+/**
+ * Every hook event is overlaid onto the native-first tree — none are
+ * dropped. To avoid swamping the readable transcript, each event nests under
+ * one expandable "Governance events" group per host (turn or session root)
+ * instead of appearing as a top-level sibling of user/assistant bubbles.
+ * Every individual event remains independently selectable and stays in
+ * chronological order within its group.
+ */
+function governanceGroupFor(host: ConversationNode, groups: Map<string, ConversationNode>): ConversationNode {
+  const existing = groups.get(host.id);
+  if (existing) return existing;
+  const group: ConversationNode = {
+    id: `governance:${host.id}`,
+    kind: 'governance',
+    timestamp_ms: host.timestamp_ms,
+    timestamp_iso: iso(host.timestamp_ms),
+    title: 'Governance events',
+    depth: host.depth + 1,
+    content: [],
+    children: []
+  };
+  groups.set(host.id, group);
+  host.children.push(group);
+  return group;
+}
 
 function projectNativeFirst(
   trace: SessionTrace,
@@ -344,18 +379,28 @@ function projectNativeFirst(
   const native = projectNativeConversation(nativeEvents, sessionId);
   const root = native.root;
 
-  // Governance overlay: attach hook-only signals to the turn active at their
+  // Governance overlay: attach every hook event to the turn active at its
   // timestamp (native turns are root children), else to the session root.
+  // All 14 hook event types are represented — none are hidden — grouped
+  // under one governance node per host so the readable transcript stays
+  // uncluttered while remaining fully inspectable.
   const turns = root.children.filter((child) => child.kind === 'turn');
+  const governanceGroups = new Map<string, ConversationNode>();
   for (const envelope of events) {
     const name = envelope.payload.hook_event_name;
-    if (!OVERLAY_EVENTS.has(name)) continue;
     const timeMs = eventTimeMs(envelope);
     const host =
       turns.find(
         (turn) => timeMs >= turn.timestamp_ms && timeMs <= turn.timestamp_ms + (turn.duration_ms ?? Number.MAX_SAFE_INTEGER)
       ) ?? root;
-    host.children.push(makeEventNode(envelope, host.depth + 1, name === 'errorOccurred' || name === 'postToolUseFailure' ? 'error' : undefined));
+    const group = governanceGroupFor(host, governanceGroups);
+    group.children.push(makeEventNode(envelope, group.depth + 1, ERROR_OVERLAY_EVENTS.has(name) ? 'error' : undefined));
+  }
+  for (const group of governanceGroups.values()) {
+    group.children.sort((left, right) => left.timestamp_ms - right.timestamp_ms);
+    group.timestamp_ms = group.children[0]?.timestamp_ms ?? group.timestamp_ms;
+    group.timestamp_iso = iso(group.timestamp_ms);
+    group.title = `Governance events (${group.children.length})`;
   }
   for (const turn of turns) turn.children.sort((left, right) => left.timestamp_ms - right.timestamp_ms);
 
@@ -366,6 +411,19 @@ function projectNativeFirst(
   ).length;
   attachCoverageGapNodes(root, coverageEntries);
 
+  // Native transcript status (verbatim completion) and hook lifecycle status
+  // (governance closure) are reconciled through one reducer instead of a
+  // silent precedence chain — divergence stays visible as explicit evidence.
+  const terminal = reconcileTerminalStatus(
+    { source: 'native', ...(root.status !== undefined ? { status: root.status } : {}) },
+    {
+      source: 'hook',
+      ...(sessionSpan?.status !== undefined ? { status: sessionSpan.status } : {}),
+      ...(sessionSpan?.status_message !== undefined ? { reason: sessionSpan.status_message } : {})
+    }
+  );
+  root.status = terminal.status;
+
   return {
     schema_version: '1.1.0',
     source: 'native+hooks',
@@ -373,10 +431,11 @@ function projectNativeFirst(
     ...(native.usage !== undefined ? { usage: native.usage } : {}),
     session_id: sessionId,
     generated_at: new Date().toISOString(),
-    status: root.status ?? sessionSpan?.status ?? 'open',
+    status: terminal.status,
+    ...(terminal.conflict ? { status_conflict: true, status_evidence: terminal.evidence } : {}),
     ...(cwd ? { cwd } : {}),
     started_at_ms: native.started_at_ms ?? sessionSpan?.start_unix_ms ?? root.timestamp_ms,
-    ...(root.status === 'ok' && native.last_event_at_ms !== undefined ? { ended_at_ms: native.last_event_at_ms } : {}),
+    ...(terminal.status === 'ok' && native.last_event_at_ms !== undefined ? { ended_at_ms: native.last_event_at_ms } : {}),
     event_count: nativeEvents.length,
     turn_count: native.turn_count,
     tool_count: native.tool_count,
