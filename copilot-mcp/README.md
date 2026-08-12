@@ -16,13 +16,14 @@ The **full GitHub Copilot CLI agentic process wrapped as an MCP server**, so oth
 | `session_events` | Recent sanitized lifecycle/tool events (reasoning withheld, verbose tool output dropped) |
 | `models_list` | Models available to the wrapped CLI |
 | `status` | CLI process state, auth, connection mode, permission policy |
+| `chewy` / `buzz` / `goose` | Named peer-copilot persona tools backed by `copilot-home` agent definitions; each supports persistent `session_id` context |
 | `ping` | Transport liveness (pongs regardless of agent status) — from @agent-fannypack/mcp |
 | `marco` | Agent liveness: routed through a real Copilot session, replies `polo` — from @agent-fannypack/mcp |
 | `blast_timer_start` / `check_in` / `blast_timer_status` | Dead-man watchdog; **every action tool call doubles as a check-in**; countdown at zero blows the connection up to nothing — from @agent-fannypack/mcp |
 
 ## Config (SSoT: `.env`)
 
-Copy [.env.example](.env.example) → `.env`. Keys: `COPILOT_MCP_HOST` (127.0.0.1), `COPILOT_MCP_HTTP_PORT` (27443, carries both Streamable HTTP and the WS upgrade), `COPILOT_MCP_PERMISSIONS` (`readonly` default: Copilot may read/search, write/shell rejected; `approve-all` opt-in), `COPILOT_MCP_MODEL`, `COPILOT_MCP_CLI_URL`, `COPILOT_MCP_CLI_PATH` (for example `copilot` or an absolute executable path), `COPILOT_MCP_ASK_TIMEOUT_MS`.
+Copy [.env.example](.env.example) → `.env`. Keys: `COPILOT_MCP_HOST` (127.0.0.1), `COPILOT_MCP_HTTP_PORT` (27443, carries both Streamable HTTP and the WS upgrade), `COPILOT_MCP_PERMISSIONS` (`readonly` default: Copilot may read/search, write/shell rejected; `approve-all` opt-in), `COPILOT_MCP_MODEL`, `COPILOT_MCP_CLI_URL`, `COPILOT_MCP_CLI_PATH` (for example `copilot` or an absolute executable path), `COPILOT_MCP_ASK_TIMEOUT_MS`, and `COPILOT_MCP_PERSONA_DIR` (defaults to the sibling `copilot-plugin/agents` directory).
 
 When the SDK-bundled platform package is unavailable, set `COPILOT_MCP_CLI_PATH=copilot` to use an installed Copilot CLI from `PATH`. `COPILOT_CLI_PATH` is also accepted for compatibility with the SDK.
 
