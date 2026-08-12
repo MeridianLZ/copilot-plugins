@@ -168,6 +168,7 @@ __marimo__/
 .next/
 .turbo/
 .playwright-mcp/
+.worktrees/
 **/test-results/
 *.tsbuildinfo
 **/node_modules/

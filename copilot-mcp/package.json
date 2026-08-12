@@ -1,0 +1,39 @@
+{
+  "name": "copilot-mcp",
+  "version": "0.1.0",
+  "description": "GitHub Copilot CLI wrapped as a multi-transport MCP server: full agentic copilot process, tools + ask exposed to other CLI agents over stdio, Streamable HTTP, and WebSocket.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "bin": {
+    "copilot-mcp-stdio": "./dist/transports/stdio.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx \"test/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "start:stdio": "node dist/transports/stdio.js",
+    "start:http": "node dist/transports/http.js",
+    "live-fire": "tsx src/test-client.ts"
+  },
+  "dependencies": {
+    "@agent-fannypack/mcp": "link:../agent-fannypack/mcp",
+    "@github/copilot": "1.0.79",
+    "@github/copilot-sdk": "1.0.9",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "ws": "8.21.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "24.1.0",
+    "@types/ws": "8.18.1",
+    "tsx": "4.20.3",
+    "typescript": "7.0.2"
+  }
+}

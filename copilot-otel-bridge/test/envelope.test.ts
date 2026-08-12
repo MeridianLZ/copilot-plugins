@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { BridgeConfig } from '../src/config.js';
-import { createEnvelope } from '../src/envelope.js';
+import { createEnvelope, sanitizeEnvelope } from '../src/envelope.js';
 import { normalizeHookPayload } from '../src/normalize.js';
 import {
   COPILOT_HOOK_EVENTS,
@@ -16,6 +16,8 @@ const config: BridgeConfig = {
   dataDir: '/tmp/copilot-hooks-test',
   eventsFile: '/tmp/copilot-hooks-test/hook-events.jsonl',
   spoolDir: '/tmp/copilot-hooks-test/spool',
+  nativeOtelDirectory: 'native-otel-test',
+  nativeOtelMaxRecords: 100_000,
   contentMode: 'hash',
   contentMaxBytes: 32_768,
   postTimeoutMs: 250,
@@ -23,7 +25,9 @@ const config: BridgeConfig = {
   spoolDrainIntervalMs: 2_000,
   consoleMode: 'silent',
   otlpTracesEndpoint: 'http://127.0.0.1:14318/v1/traces',
-  serviceName: 'test'
+  serviceName: 'test',
+  dedupeWindowMs: 10_000,
+  copilotHome: '/tmp/copilot-home-test'
 };
 
 test('all 14 documented event names normalize from command-hook environment', () => {
@@ -105,4 +109,19 @@ test('errorOccurred promotes error type before error content is hashed', () => {
   assert.equal(envelope.payload['error_type'], 'RateLimitError');
   assert.ok(isJsonObject(envelope.payload['error']));
   assert.equal(JSON.stringify(envelope).includes('contains sensitive details'), false);
+});
+
+test('sanitizeEnvelope applies content policy to direct envelope payloads', () => {
+  const direct = createEnvelope(
+    { sessionId: 'session-1', timestamp: 1_800_000_000_000 },
+    config,
+    'http-hook',
+    'userPromptSubmitted'
+  );
+  direct.payload['prompt'] = 'sensitive direct payload';
+
+  const sanitized = sanitizeEnvelope(direct, config);
+
+  assert.equal(JSON.stringify(sanitized).includes('sensitive direct payload'), false);
+  assert.ok(isJsonObject(sanitized.payload['prompt']));
 });

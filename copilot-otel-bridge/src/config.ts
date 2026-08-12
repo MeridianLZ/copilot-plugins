@@ -1,4 +1,6 @@
+import { homedir } from 'node:os';
 import path from 'node:path';
+import { validateLocalTelemetryEndpoint } from './local-runtime.js';
 import type { ContentMode } from './types.js';
 
 function intFromEnv(name: string, fallback: number): number {
@@ -30,6 +32,8 @@ export interface BridgeConfig {
   dataDir: string;
   eventsFile: string;
   spoolDir: string;
+  nativeOtelDirectory: string;
+  nativeOtelMaxRecords: number;
   contentMode: ContentMode;
   contentMaxBytes: number;
   postTimeoutMs: number;
@@ -37,7 +41,29 @@ export interface BridgeConfig {
   spoolDrainIntervalMs: number;
   consoleMode: 'json' | 'pretty' | 'silent';
   otlpTracesEndpoint: string;
+  localTelemetry?: {
+    endpoint: URL;
+    hostname: string;
+  };
   serviceName: string;
+  dedupeWindowMs: number;
+  copilotHome: string;
+}
+
+function telemetryHostname(endpoint: URL): string {
+  return endpoint.hostname.replace(/^\[(.+)\]$/, '$1');
+}
+
+export function withValidatedLocalTelemetry(config: BridgeConfig): BridgeConfig {
+  const endpoint = validateLocalTelemetryEndpoint(config.otlpTracesEndpoint);
+  return {
+    ...config,
+    otlpTracesEndpoint: endpoint.toString(),
+    localTelemetry: {
+      endpoint,
+      hostname: telemetryHostname(endpoint)
+    }
+  };
 }
 
 export function loadConfig(): BridgeConfig {
@@ -54,6 +80,8 @@ export function loadConfig(): BridgeConfig {
     dataDir,
     eventsFile: path.join(dataDir, 'hook-events.jsonl'),
     spoolDir: path.join(dataDir, 'spool'),
+    nativeOtelDirectory: process.env['COPILOT_TRACE_NATIVE_OTEL_DIR'] ?? path.join(dataDir, 'native-otel'),
+    nativeOtelMaxRecords: intFromEnv('COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS', 100_000),
     contentMode: contentModeFromEnv(),
     contentMaxBytes: intFromEnv('COPILOT_TRACE_CONTENT_MAX_BYTES', 32_768),
     postTimeoutMs: intFromEnv('COPILOT_TRACE_POST_TIMEOUT_MS', 250),
@@ -62,6 +90,8 @@ export function loadConfig(): BridgeConfig {
     consoleMode: consoleValue,
     otlpTracesEndpoint:
       process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'http://127.0.0.1:27432/v1/traces',
-    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge'
+    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge',
+    dedupeWindowMs: intFromEnv('COPILOT_TRACE_DEDUPE_WINDOW_MS', 10_000),
+    copilotHome: process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot')
   };
 }

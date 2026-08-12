@@ -1,9 +1,13 @@
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.157.0
+    # Windows/WSL bind mounts can be owner-only; the scratch image has no init
+    # path to repair permissions before opening the config and durable files.
+    user: "0:0"
     command: ["--config=/etc/otelcol-contrib/config.yml"]
     volumes:
       - ./otel/collector.yml:/etc/otelcol-contrib/config.yml:ro
+      - ./.copilot/telemetry-live/native-otel:/native-otel
     ports:
       - "127.0.0.1:${OTEL_COLLECTOR_GRPC_PORT:-27431}:4317"
       - "127.0.0.1:${OTEL_COLLECTOR_HTTP_PORT:-27432}:4318"
@@ -19,13 +23,21 @@ services:
       COPILOT_TRACE_DATA_DIR: /data
       COPILOT_TRACE_CONTENT_MODE: ${COPILOT_TRACE_CONTENT_MODE:-hash}
       COPILOT_TRACE_CONSOLE_MODE: ${COPILOT_TRACE_CONSOLE_MODE:-pretty}
+      COPILOT_TRACE_NATIVE_OTEL_DIR: /native-otel
+      COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS: ${COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS:-100000}
+      COPILOT_HOME: /copilot-home
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
       OTEL_SERVICE_NAME: github-copilot-cli-hook-bridge
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=development,service.namespace=agent-observability
     volumes:
       - ./.copilot/telemetry:/data
+      - ./.copilot/telemetry-live/native-otel:/native-otel:ro
+      # Native conversation replica: read-only view of the host Copilot home so
+      # the containerized bridge can project session-state/<id>/events.jsonl.
+      - ${COPILOT_HOME_HOST:-~/.copilot}:/copilot-home:ro
     ports:
       - "127.0.0.1:14329:14329"
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_started
     restart: unless-stopped

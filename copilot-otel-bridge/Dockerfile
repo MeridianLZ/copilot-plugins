@@ -14,5 +14,6 @@ RUN corepack enable
 COPY package.json ./
 RUN pnpm install --prod --no-frozen-lockfile
 COPY --from=build /app/dist ./dist
+COPY ui ./ui
 USER node
 CMD ["node", "dist/src/bridge.js"]

@@ -2,6 +2,105 @@
 
 _Newest first._
 
+## 2026-08-10 — paused before UI integration
+
+- MCP propagation completed: W3C carrier validation/injection/extraction,
+  HTTP/WS request context, peer linkage, and bounded peer state.
+- Commits: `7194d44`, `73a18d4`, `24a1b40`.
+- Verification: focused propagation tests **12/12**, full MCP tests
+  **17/17**, typecheck and build pass. Fannypack build pass.
+- The Windows x64 Copilot, TypeScript, esbuild, and koffi optional packages
+  were materialized directly after full optional pnpm installation repeatedly
+  failed on cross-platform 502/504/ECONNRESET downloads. No package manifests
+  changed.
+- UI/evidence implementation was deliberately paused for compaction. The
+  final MCP bounded-state review remains the immediate resume check.
+
+## 2026-08-10 — native OTel lane and MCP dependency blocker
+
+- Implemented and reviewed proxy-aware redaction, local no-proxy runtime,
+  native OTel normalization/cache, Collector durable signal files, native OTel
+  API, and source coverage/correlation.
+- Commits: `3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`,
+  `0936e70`, `ab84a74`, `a5c44e1`, `21402e6`, `486d345`, `dd4b6ec`.
+- Bridge/native tests and checks remained green through the native integration;
+  Collector Compose validation passed with loopback-only bindings.
+- A fresh npm/px window was tested with `NODE_USE_SYSTEM_CA=1`,
+  `NODE_USE_ENV_PROXY=1`, and pinned `pnpm@10.15.0`. Registry requests reached
+  npm but optional platform downloads returned intermittent 502/504/ECONNRESET;
+  pnpm terminated on a missing optional Darwin package. No credential was
+  exposed.
+- MCP propagation and final UI work are waiting on a usable `copilot-mcp`
+  install; the historical security-invalid non-native run remains immutable.
+
+## 2026-08-08 — critical proxy credential exposure report
+
+- **Finding:** The Docker proxy setup read inherited process
+  `$HTTP_PROXY`/`$HTTPS_PROXY`, base64-encoded both identical authenticated
+  values, and emitted the generated script through
+  `[Console]::Out.Write($script) | wsl ...`.
+- **Exact identifier without secret reproduction:** `http://` proxy endpoint
+  `vm-mb-az035.meridianbanker.com:8080`, userinfo present, decoded length 87,
+  base64 length 116, SHA-256
+  `6bbf5140efb3dcd781d0c01d7f9331f88e4fb058766740b2727c40f8d13bbd52`.
+- **Evidence:** transcript `events.jsonl` lines 2689–2690; failed run
+  `2026-08-08T13-43-32-0600_bootstrap-nonnative-01`; verification and correction
+  hashes remain sealed.
+- **Files:** direct Docker sink
+  `/etc/systemd/system/docker.service.d/proxy.conf`; provenance
+  `C:\Users\lzautke\.env.local` → `HKCU:\Environment`; plaintext copies in
+  `C:\Users\lzautke\.gitconfig` and `C:\Users\lzautke\.npmrc`.
+- **Response:** crisis report written; B+C remediation approved:
+  environment-only accessor, protected WSL credential channel, no plaintext Git/npm
+  proxy state, then credentialless local gateway.
+- **Gate:** user reports remote rotation, but the current long-lived process still
+  carries the exposed fingerprint. Restart/cleanup and a clean canary-negative
+  non-native run are mandatory before downstream work.
+
+## 2026-08-06 (latest) - hook-telemetry FAQ, container replica mount, PR #1
+
+- **Request**: answer (md + KB): value of custom hook telemetry; hook inputs/memory/context; harness state beyond exit code; exit-code-1 uses; UI dockerized?; can primary agent set copilot model/context/effort — then PR + continuity.
+- **Answers** in `copilot-otel-bridge/docs/HOOK_TELEMETRY_FAQ.md` (`701ea3e`) + KB `copilot-cli-hook-telemetry-faq-2026-08-06`. Headlines: hooks = push/remote/deny-capable governance lane vs native transcript = verbatim authority; hooks get stdin JSON + env + full user FS (incl. `transcriptPath` → whole conversation); NO harness feedback beyond exit code; preToolUse exit≠0 denies (guard-core pattern), other events unaffected; UI is dockerized (`hook-bridge` service) and now replica-capable via ro `~/.copilot` mount (`COPILOT_HOME`); SDK fully supports model + reasoningEffort (capability-gated) + context (workingDirectory/systemMessage/memory/tools/MCP) incl. mid-session `setModel` — copilot-mcp only plumbs `model` (follow-up filed).
+- **PR #1** opened: `feat/copilot-otel-replica` → `main`.
+
+## 2026-08-06 (late) - trace UI taken over → full conversation replica shipped
+
+- **Request**: take over the trace UI (another agent's work, "falling VERY short"); browse 6-10 rich sessions with screenshots, live-fire a copilot-mcp session watching real-time arrival, chase every missing span to its root, then plan + implement to deployable.
+- **Root causes found (all evidence-backed)**: (1) TWO identical hook files in `~/.copilot/hooks/` (install script's generate+apply both wrote `.json`) → every event captured twice ~600 ms apart under fresh `event_id`s; dedupe keyed on `event_id` could never fire. (2) `hash` content mode → sha256 chips, no content. (3) NO hook event carries main-agent assistant prose (verified vs official hooks reference; only `subagentStop` has text). (4) The verbatim substrate `~/.copilot/session-state/<id>/events.jsonl` (user/assistant messages, reasoningText, toolCallId/turnId, subagent toolCallId == child hook session id, permissions, usage) was read by NO code despite `transcript_path` being captured.
+- **Shipped** on `feat/copilot-otel-replica` (7 commits `ed40729..c6fdebb`, pushed): preview artifact renamed off `.json` + self-heal delete; payload-hash dedupe at ingest + projection (repairs historical 2× ledger read-time); `native-session.ts` native-first projector (chunk reassembly by messageId/chunkIndex, joins by toolCallId/turnId/requestId, parentId ignored, redactSecrets over all native strings, encrypted reasoning = marker only); `native-cache.ts` incremental byte-offset reader (UI poll is the tick); conversation doc 1.1.0 (`source`, `model`, `usage`); UI feed rewritten to render the doc (assistant markdown bubbles + model chips + reasoning collapsibles, tool cards, nested subagent conversations with open-child links, permission rows, usage footer, waterfall min/max fixed); turn = user exchange (not model interaction).
+- **Acceptance**: 34/34 tests; smoke = hooks-only fallback renders once; `6baa6c99…` renders as a true replica (verbatim prompt, 168 assistant messages incl. "I'll map the bridge…", 5 subagent conversations cross-linked, AIU footer); fresh live session `d6caf69a…` appeared verbatim (bold/fence/inline markdown correct) within ~2-4 s. `.md` export mirrors.
+- **SOTA (2026-08-06)**: events.jsonl undocumented (copilot-cli#3551) but mirrors documented SDK session event model — guards loose, hooks-only fallback retained; `assistant.reasoning`/`reasoningText` readable model-permitting; native OTel full content possible via `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`; prior art mitsha-microsoft/copilot-session-explorer.
+
+## 2026-08-06 - copilot-otel-bridge: hardening + conversation UI level-up
+
+- **Request**: SOTA research (team), exercise all spans, then level-up the bridge: harden known issues and ship a professional conversation viewer (verbatim chronological nested UI, sidebar filters, code-block toolbar, MD/JSON/PDF export).
+- **Research (prior turn, still binding)**: dual-lane OTel is correct; GenAI/MCP conventions remain Development-status - pin + compatibility layer; links over invented parentage; privacy fail-closed; sample 100% locally / tail-sample errors at scale. Primary sources: OTel GenAI spans, MCP `_meta` propagation, sensitive-data guidance.
+- **Hardening shipped (uncommitted)**:
+  - `Dockerfile`: runtime `COPY ui ./ui` (fixes container `/ui` 404).
+  - `src/generate-hooks.ts`: `--content-mode off|hash|full` and env `COPILOT_TRACE_CONTENT_MODE`; `--post-timeout-ms` (fixes hardcoded hash split-brain).
+  - `scripts/smoke-test.{ps1,sh}`: ordered `postToolUseFailure` + `errorOccurred` after success path.
+  - `VALIDATION.md` + `README.md`: 18-test gate, conversation APIs, content-mode flags.
+- **Conversation stack shipped (uncommitted)**:
+  - `src/conversation-projector.ts` + `test/conversation-projector.test.ts` — deterministic nested tree + markdown export.
+  - `src/bridge.ts` routes: `GET /api/sessions/:id/conversation` and `.../conversation.md`.
+  - `ui/index.html` rewrite: sidebar sort/filter/search; nested session→turn→tool/subagent; collapsible waterfall; code blocks with hover copy / line numbers / Aa±; export copy/MD/JSON/PDF; live poll preserved; export prefers server MD/JSON with client fallback.
+- **Verification**: `pnpm check` 18/18; bridge restarted on 14329; smoke `smoke-session-1785975144` → conversation API `event_count=15 tool_count=2 error_count=2`; `/ui` 200 with export+code-toolbar markers.
+- **Prior live evidence retained**: synthetic full-surface coverage session + real CLI session with native `invoke_agent`/`chat`/`execute_tool` and hook lifecycle spans at collector.
+- **Not committed**. Branch context: work lives under `copilot-otel-bridge/` alongside earlier `feat/copilot-otel-bridge` history; commit split recommended before PR.
+- **Continuity**: this `/continuity` pass rewrote CURRENT_TASK_STATE, updated PLANS/TASKS, prepended this SESSION_LOG entry, appended REMEMBER + INSTRUCTIONAL_INSIGHTS. Removed accidental empty `copilot-otel-bridge/docs/continuity/` dir. Canonical set remains `docs/continuity/` only.
+## 2026-08-05 — copilot-mcp: full Copilot CLI wrapped as multi-transport MCP server + @agent-fannypack/mcp signals
+
+- **Request**: wrap the FULL Copilot CLI process, expose tools + an `ask` tool queryable by *other CLI agents* over MCP; stdio + Streamable HTTP + WebSocket transports; JSON-RPC 2.0 TS typings + helper classes; research current MCP specs; implement, load, live-fire verify. Mid-plan pivot: factor three agent-to-agent signals (ping, marco/polo, blast timer) into a reusable npm package `@agent-fannypack/mcp`.
+- **"The python at the end of the following"**: the referenced doc arrived only via the AskUserQuestion answer — a Gemini conversation ending in a FastMCP `server.py` wrapping the deprecated one-shot `gh copilot` extension. Read/understood; rejected as substrate (no sessions/tools/models). Correct substrate: `@github/copilot-sdk` 1.0.8 (JSON-RPC to a CLI child the SDK spawns; `copilot --headless --port` external mode; `sendAndWait` resolving on the session-idle completion signal).
+- **SOTA (verified 2026-08-05)**: MCP spec **2026-07-28 is final** (stateless core, MRTR, `Mcp-Method`/`Mcp-Name` headers, CIMD); TS SDK v2 shipped **stable 2.0.0** mid-session (`@modelcontextprotocol/server|client|node`; monolithic `sdk` retired; `createMcpHandler`/`serveStdio` serve 2026-07-28 + legacy 2025-11-25 from one endpoint). WebSocket transport is NOT in the spec — SEP-1287 (open PR) semantics implemented as a custom Transport. Session/event semantics grounded in the repo's own Copilot SDK research doc (`docs/copilot-research/CHATGPT_claude-code-otel-hook-bridge/jsonl-agentic-event-streaming-lifecycle-copilot-sdk-expanded.md` §§25–48) via an Explore-agent extraction.
+- **Built**: `agent-fannypack/mcp/` (`@agent-fannypack/mcp`, publish-ready: ping/marco/blast-timer + `withCheckIn`, 8 tests) and `copilot-mcp/` (jsonrpc typings+helpers, CopilotBridge with root-agent answer filter + event sanitization + readonly permission policy, 12-tool server core, 3 transports on port 27443, live-fire client, 5 tests). `pnpm check` green in both.
+- **Live-fire (real Copilot process)**: stdio/HTTP/WS all PASS — `ask("What is 2+2?")`→"4" (~7s), marco→"polo" (7–12s), blast arm/check-in/reset; **detonation observed**: armed timer with no check-ins tore down WS clients + sessions + CLI child, exit 1. Found+fixed: expiry hooks must register once per process, not per `buildServer()` (stateless HTTP stacked 11 duplicate callbacks). Cross-agent: `claude -p --allowedTools mcp__copilot-mcp__ask` → "Paris".
+- **Registered**: `claude mcp add copilot-mcp --scope user` (Connected) + `~/.copilot/mcp-config.json` (allowlist: ping, marco, ask, session_list, status).
+- **Commits**: user requested atomic split — unpushed squash reset into 7 commits `3fa0f1e` → `fe6346b` → `649793d` → `81b3045` → `52b7990` → `7d46fc5` → `db436b2`, **pushed** as `origin/feat/copilot-mcp`.
+- **OTel side-signal**: the 2026-08-02 bridge is still alive (14329 healthy; its harness task handle died with exit 127 — cosmetic). Its ledger captured a **real** Copilot session `6baa6c99…` on 2026-08-03 (subagents, MCP tools) — organic hook-lane evidence for the open acceptance-run item.
+- **Parallel work observed, not mine**: working-tree modifications in `copilot-otel-bridge/` + new `src/conversation-projector.ts` (+test) from another session — left untouched.
+- **Records**: agent memory `~/.claude/projects/C--Users-me-dev-fintech-marketplace/memory/copilot-mcp-wrapper.md`.
+
 ## 2026-08-02 — Copilot OTel hook bridge: implementation, ~/.copilot wiring, trace-viewer UI (scoped entry; the same session's master-kb `/agent-kb` dissolution is codified in the KB's `_governance/migration/` notes, not here)
 
 - **Source**: `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` (research date 2026-08-01, committed same day as `6506241`) used as the implementation guide. It ships `SHA256SUMS` → treated as a frozen reference; copied wholesale to top-level `copilot-otel-bridge/` and evolved there.

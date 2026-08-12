@@ -1,28 +1,44 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-02 (scope: Copilot OTel bridge workstream)_
+## 2026-08-10 16:32 MDT — paused before UI integration
 
-## Where things stand
+**Worktree:** `feat/copilot-otel-implementation`
 
-The Copilot CLI OTel hook bridge is **implemented, verified, and committed** (`a2af5c3` on `feat/copilot-otel-bridge`). `copilot-otel-bridge/` at repo root is the working stack (the `docs/copilot-research/CHATGPT_github-copilot-cli-otel-hook-bridge/` original is a frozen, checksummed reference — never edit it). The gate `pnpm check` is green (strict typecheck, 16/16 tests, build). A synthetic smoke session was verified through all four stages: hook egress → bridge JSONL ledger → reconstructed OTel spans → dockerized collector (16 spans received), and the trace-viewer UI at `http://127.0.0.1:14329/ui` was inspected in a browser (Sidebar session list + ChatConversation pane + span waterfall all rendering correctly, hash-mode content chips included).
+**Completed:**
 
-`~/.copilot` was updated: `hooks/copilot-otel-bridge.json` installs observers for all 14 hook events (command transport → built `dist/src/hook-egress.js`, hash content mode). `~/.copilot/settings.json` was deliberately NOT touched — the native OTel lane activates per-shell via `scripts/copilot-otel-env.{sh,ps1}` (endpoint default `http://127.0.0.1:27432`). `~/.copilot/otel_settings.jsonc` is a reference catalog only (not auto-loaded by Copilot).
+- Proxy-aware redaction and local no-proxy runtime:
+  `3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`, `0936e70`.
+- Native OTel traces/metrics/logs, shared opaque-content redaction,
+  restart-safe bounded cache, truncation accounting:
+  `ab84a74`, `a5c44e1`, `21402e6`.
+- Durable Collector signal files and sanitized native OTel API:
+  `486d345`.
+- Source coverage/correlation ledger and gap projection:
+  `dd4b6ec`.
+- MCP W3C carrier propagation, HTTP/WS extraction, peer linkage, and bounded
+  peer state:
+  `7194d44`, `73a18d4`, `24a1b40`.
 
-Local processes possibly still running from the verification: the bridge (node, port 14329) and the `otel-collector` container (ports 27431/27432).
+**Verification:** MCP typecheck, focused propagation tests (12/12), full MCP
+tests (17/17), and build pass. Fannypack builds. Windows x64 Copilot,
+TypeScript, esbuild, and koffi packages were installed/materialized directly
+after optional cross-platform pnpm downloads proved unreliable. No manifests
+or credentials were changed.
 
-## Immediate next step
+**Paused point:** UI/evidence integration has not started. One read-only MCP
+bounded-state review was still running when this continuity checkpoint was
+created; it must be read before UI implementation resumes.
 
-1. **Acceptance run**: launch a real `copilot` session (trusted repo, env script dot-sourced), exercise a tool call, confirm both lanes arrive and the session appears in `/ui`.
-2. Decide merge/push of `feat/copilot-otel-bridge`.
+**Remaining critical path:**
 
-## Key decisions this session
+1. Finish/read the MCP bounded-state review.
+2. Build the trace/coverage/MCP evidence inspector in the UI.
+3. Add append-only evidence recording and live acceptance.
+4. Run the clean post-rotation non-native canary-negative checkpoint; retain
+   the historical security-invalid run unchanged.
 
-- Implementation home = top-level `copilot-otel-bridge/` (checksummed reference stays frozen under `docs/`).
-- TypeScript 7.0.2 (the guide's 6.0.0 pin is a phantom — never published).
-- Collector host ports 27431/27432 in `.env` (SSoT) because 4317/4318, 14317/14318, and 24317/24318 are all occupied on this machine.
-- UI is dependency-free static HTML served by the bridge itself — no separate frontend build.
+**Resume directory:**
 
-## Open questions for the user
-
-- Merge/push the branch?
-- Keep bridge + collector running as a resident service, or stop until the acceptance run?
+```powershell
+cd C:\Users\lzautke\dev\fintech-marketplace\.worktrees\copilot-otel-implementation
+```

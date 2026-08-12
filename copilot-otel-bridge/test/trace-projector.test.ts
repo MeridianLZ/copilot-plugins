@@ -103,6 +103,54 @@ test('projectSessionTrace reconstructs lifecycle spans with correct pairing', ()
   assert.equal(subagent.end_unix_ms, base + 6_000);
 });
 
+test('a fully doubled ledger projects single spans and no recovered ghosts', () => {
+  // Two hook installs: every line re-emitted with a fresh event_id.
+  const doubled = ledger.flatMap((entry) => {
+    counter += 1;
+    return [entry, JSON.stringify({ ...(JSON.parse(entry) as object), event_id: `evt-dup-${counter}` })];
+  });
+  const envelopes = parseLedgerLines(doubled);
+  assert.equal(envelopes.length, 13);
+  const trace = projectSessionTrace(envelopes, 'sess-1');
+  const lifecycle = trace.spans.filter((span) => span.kind !== 'point');
+  assert.deepEqual(
+    lifecycle.map((span) => span.kind).sort(),
+    ['session', 'subagent', 'tool', 'tool', 'turn']
+  );
+  assert.equal(lifecycle.filter((span) => span.status === 'recovered').length, 0);
+  assert.equal(lifecycle.filter((span) => span.heuristic === true).length, 0);
+});
+
+test('a second sessionEnd neither ghosts spans nor flips session status', () => {
+  const repeatEnd = [
+    line('sessionStart', base, {}),
+    line('userPromptSubmitted', base + 1_000, {}),
+    line('agentStop', base + 2_000, {}),
+    line('sessionEnd', base + 3_000, { reason: 'complete' }),
+    line('sessionEnd', base + 4_000, { reason: 'complete' })
+  ];
+  const trace = projectSessionTrace(parseLedgerLines(repeatEnd), 'sess-1');
+  const lifecycle = trace.spans.filter((span) => span.kind !== 'point');
+  assert.equal(lifecycle.filter((span) => span.status === 'recovered').length, 0);
+  const session = lifecycle.find((span) => span.kind === 'session');
+  assert.ok(session);
+  assert.equal(session.status, 'ok');
+  assert.equal(session.end_unix_ms, base + 3_000);
+});
+
+test('projectSessions reopens a session when events continue past sessionEnd', () => {
+  const resumed = [
+    line('sessionStart', base, {}),
+    line('sessionEnd', base + 1_000, { reason: 'complete' }),
+    line('userPromptSubmitted', base + 5_000, {})
+  ];
+  const sessions = projectSessions(parseLedgerLines(resumed));
+  const summary = sessions[0];
+  assert.ok(summary);
+  assert.equal(summary.status, 'open');
+  assert.equal(summary.ended_at_ms, undefined);
+});
+
 test('projectSessionTrace recovers spans left open at sessionEnd', () => {
   const openLedger = [
     line('sessionStart', base, {}),
