@@ -111,6 +111,13 @@ test('native events switch projection to native-first with hook overlay', () => 
   assert.equal(doc.source, 'native+hooks');
   assert.equal(doc.model, 'gpt-5.6-terra');
   assert.equal(doc.turn_count, 1);
+  // Regression: native transcript here never emits session.shutdown, so
+  // native status alone would stay 'open' forever. The hook lane's
+  // sessionEnd(reason: 'complete') must still close the document status —
+  // this was the exact "status divergence" bug the terminal-status reducer
+  // fixes.
+  assert.equal(doc.status, 'ok');
+  assert.equal(doc.status_conflict, undefined);
   const turn = doc.root.children.find((child) => child.kind === 'turn');
   assert.ok(turn);
   const assistantText = JSON.stringify(turn);
@@ -163,6 +170,33 @@ test('all 14 hook events remain present (none hidden) in native-first projection
   for (const name of expected) {
     assert.ok(presentNames.has(name), `expected hook event ${name} to remain present, got ${[...presentNames].join(', ')}`);
   }
+});
+
+test('conflicting native/hook terminal status is reconciled and surfaced explicitly', () => {
+  // Native transcript closes cleanly (session.shutdown), but the hook lane's
+  // sessionEnd carries a non-complete/non-user_exit reason — hook status
+  // closes 'error'. The reconciled document status must not silently pick
+  // whichever lane happened to run first; it must resolve to the more
+  // severe status AND flag the disagreement.
+  const conflictRaw = [
+    line('sessionStart', base, { cwd: '/repo', source: 'startup' }),
+    line('userPromptSubmitted', base + 1_000, { prompt: 'do the thing' }),
+    line('sessionEnd', base + 9_000, { reason: 'crashed' })
+  ];
+  const conflictEnvelopes = conflictRaw.map((row) => JSON.parse(row));
+  const nativeLines = [
+    JSON.stringify({ type: 'session.start', data: { copilotVersion: '1.0.79-5' }, id: 'n1', timestamp: new Date(base).toISOString() }),
+    JSON.stringify({ type: 'user.message', data: { content: 'do the thing' }, id: 'n2', timestamp: new Date(base + 1_000).toISOString() }),
+    JSON.stringify({ type: 'session.shutdown', data: {}, id: 'n3', timestamp: new Date(base + 9_500).toISOString() })
+  ];
+  const doc = projectConversation(conflictEnvelopes, 'sess-conv', parseNativeLines(nativeLines));
+  assert.equal(doc.status, 'error');
+  assert.equal(doc.status_conflict, true);
+  assert.ok(doc.status_evidence);
+  const sources = doc.status_evidence!.map((entry) => entry.source).sort();
+  assert.deepEqual(sources, ['hook', 'native']);
+  assert.ok(doc.status_evidence!.some((entry) => entry.source === 'native' && entry.status === 'ok'));
+  assert.ok(doc.status_evidence!.some((entry) => entry.source === 'hook' && entry.status === 'error'));
 });
 
 test('without native events the hooks-only projection is unchanged in shape', () => {

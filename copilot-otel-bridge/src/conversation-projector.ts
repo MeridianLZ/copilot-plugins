@@ -8,6 +8,7 @@ import {
 import { projectNativeConversation, type NativeEvent } from './native-session.js';
 import type { CoverageDisposition, CoverageEntry } from './correlation.js';
 import { redactSecrets, truncateUtf8 } from './security.js';
+import { reconcileTerminalStatus } from './terminal-status.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -71,6 +72,14 @@ export interface ConversationDocument {
   session_id: string;
   generated_at: string;
   status: ProjectedStatus;
+  /**
+   * True when native transcript status and hook lifecycle status disagreed
+   * and had to be reconciled (see terminal-status.ts). Absent/false means
+   * both lanes agreed or only one lane had an explicit terminal signal.
+   */
+  status_conflict?: boolean;
+  /** Every explicit (non-'open') terminal status observation that fed `status`. */
+  status_evidence?: Array<{ source: 'native' | 'hook'; status: ProjectedStatus; reason?: string }>;
   end_reason?: string;
   cwd?: string;
   started_at_ms: number;
@@ -402,6 +411,19 @@ function projectNativeFirst(
   ).length;
   attachCoverageGapNodes(root, coverageEntries);
 
+  // Native transcript status (verbatim completion) and hook lifecycle status
+  // (governance closure) are reconciled through one reducer instead of a
+  // silent precedence chain — divergence stays visible as explicit evidence.
+  const terminal = reconcileTerminalStatus(
+    { source: 'native', ...(root.status !== undefined ? { status: root.status } : {}) },
+    {
+      source: 'hook',
+      ...(sessionSpan?.status !== undefined ? { status: sessionSpan.status } : {}),
+      ...(sessionSpan?.status_message !== undefined ? { reason: sessionSpan.status_message } : {})
+    }
+  );
+  root.status = terminal.status;
+
   return {
     schema_version: '1.1.0',
     source: 'native+hooks',
@@ -409,10 +431,11 @@ function projectNativeFirst(
     ...(native.usage !== undefined ? { usage: native.usage } : {}),
     session_id: sessionId,
     generated_at: new Date().toISOString(),
-    status: root.status ?? sessionSpan?.status ?? 'open',
+    status: terminal.status,
+    ...(terminal.conflict ? { status_conflict: true, status_evidence: terminal.evidence } : {}),
     ...(cwd ? { cwd } : {}),
     started_at_ms: native.started_at_ms ?? sessionSpan?.start_unix_ms ?? root.timestamp_ms,
-    ...(root.status === 'ok' && native.last_event_at_ms !== undefined ? { ended_at_ms: native.last_event_at_ms } : {}),
+    ...(terminal.status === 'ok' && native.last_event_at_ms !== undefined ? { ended_at_ms: native.last_event_at_ms } : {}),
     event_count: nativeEvents.length,
     turn_count: native.turn_count,
     tool_count: native.tool_count,
