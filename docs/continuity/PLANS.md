@@ -91,6 +91,18 @@ A Claude Code plugin marketplace (`fintech-frontend`, `fintech-backend`) for ent
 
 6. **Trace UI → full conversation replica** (done & pushed 2026-08-06, branch `feat/copilot-otel-replica` off `feat/copilot-mcp`, commits `ed40729..c6fdebb`) — root-caused why the viewer fell short of a verbatim replica and fixed the whole pipeline: (RC1) double hook install (`.generated.json` + `.json` both live → every event ×2; preview now `*.generated.preview`, payload-hash dedupe at ingest+projection); (RC2/3) hook lane structurally lacks main-agent assistant prose at any content mode; (RC4) the real substrate is Copilot's native `~/.copilot/session-state/<id>/events.jsonl` — new `native-session.ts` projects it native-first (chunk reassembly, toolCallId/turnId joins, reasoningText, subagent `toolCallId`==child hook session id cross-links, permissions, usage) with hooks as governance overlay + `native-cache.ts` on-demand incremental reader; UI rewritten to render the conversation document (user/assistant markdown bubbles, model chips, reasoning collapsibles, tool cards, nested subagent conversations, usage footer, fixed waterfall). 34/34 tests; live-fire acceptance rendered a fresh copilot-mcp session verbatim in near-real-time.
 
+7. **Comprehensive local OTel pipeline** (in progress, branch `feat/copilot-otel-comprehensive`, worktree `.worktrees/copilot-otel-comprehensive`) — approved plan separates four sources (`native_otel`, `native_transcript`, `hook`, `evidence`) and requires a recorded non-native hook → bridge → Collector → custom UI/Aspire checkpoint before full-content native OTLP. Task 0 is technically proven but blocked by a credential-exposure incident; rotate and rerun before any dependent task.
+
+## Current facts (as of 2026-08-08, comprehensive bootstrap scope)
+
+- Worktree safety commit `37bc50b` adds `.worktrees/` to `.gitignore`; isolated branch/worktree is clean.
+- Docker CE 29.7.2 and Compose 5.4.0 are installed and active in WSL2 Ubuntu 26.04.
+- Session-local runtime is live: bridge `127.0.0.1:14329`, Collector OTLP `127.0.0.1:27431/27432` + health `27433`, Aspire `127.0.0.1:18888`.
+- Exactly one user hook JSON is installed with all 14 events. Native Copilot OTel was explicitly unset for the checkpoint.
+- Real successful session `cc2d319a-897d-4a78-84ff-7ac4910ff239` produced 8 hook records, 11 projected spans, durable Collector traces, an exact custom-UI conversation, and two Aspire trace rows.
+- Run `2026-08-08T13-43-32-0600_bootstrap-nonnative-01` is permanently `failed` because a reversible base64 proxy credential was printed into the Copilot transcript. Verification hash: `C70E1A0460E6A99D8AAC4D55FC6C0545CDF5B70F14AAEC99B87C37C14CEEDB1F`; correction hash: `E63712EA513B59EBCC07C1D155D3BBAEA33C474CA73F12536185B817592A8BBF`.
+- SQL state: 7 done, 15 pending, 1 blocked (`bootstrap-planning-otel`). The next dependent task remains gated.
+
 ## Current facts (as of 2026-08-06 late, replica scope)
 
 - **PR #1 open**: `feat/copilot-otel-replica` → `main` (carries copilot-mcp + level-up + replica). FAQ answering hook-telemetry questions at `copilot-otel-bridge/docs/HOOK_TELEMETRY_FAQ.md` (commit `701ea3e`) + KB note `projects/fintech-marketplace/copilot-otel-bridge/copilot-cli-hook-telemetry-faq-2026-08-06`; compose `hook-bridge` now mounts host `~/.copilot` ro (`COPILOT_HOME=/copilot-home`) so the containerized UI serves the replica.

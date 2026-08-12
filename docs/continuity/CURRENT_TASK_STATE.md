@@ -1,44 +1,45 @@
 # CURRENT TASK STATE
 
-## 2026-08-10 16:32 MDT — paused before UI integration
+_Last updated: 2026-08-12 (development integration checkpoint)._
 
-**Worktree:** `feat/copilot-otel-implementation`
+## Development branch
 
-**Completed:**
+The committed Copilot OTel/MCP work is consolidated in the `development`
+worktree at `C:\Users\lzautke\dev\fintech-marketplace\.worktrees\development`.
+It was created from `main`, then merged from `feat/copilot-otel-replica`.
 
-- Proxy-aware redaction and local no-proxy runtime:
-  `3908917`, `2445000`, `dafcb9d`, `1db8263`, `cfd5ac8`, `0936e70`.
-- Native OTel traces/metrics/logs, shared opaque-content redaction,
-  restart-safe bounded cache, truncation accounting:
-  `ab84a74`, `a5c44e1`, `21402e6`.
-- Durable Collector signal files and sanitized native OTel API:
-  `486d345`.
-- Source coverage/correlation ledger and gap projection:
-  `dd4b6ec`.
-- MCP W3C carrier propagation, HTTP/WS extraction, peer linkage, and bounded
-  peer state:
-  `7194d44`, `73a18d4`, `24a1b40`.
+The implementation worktree completed:
 
-**Verification:** MCP typecheck, focused propagation tests (12/12), full MCP
-tests (17/17), and build pass. Fannypack builds. Windows x64 Copilot,
-TypeScript, esbuild, and koffi packages were installed/materialized directly
-after optional cross-platform pnpm downloads proved unreliable. No manifests
-or credentials were changed.
+- proxy-aware redaction and local no-proxy runtime;
+- native OTel traces, metrics, logs, durable Collector files, and API;
+- native transcript projection and bounded restart-safe caches;
+- source coverage/correlation and explicit gap dispositions;
+- MCP W3C carrier propagation and bounded peer linkage;
+- paged forensic API contracts and live conversation rendering.
 
-**Paused point:** UI/evidence integration has not started. One read-only MCP
-bounded-state review was still running when this continuity checkpoint was
-created; it must be read before UI implementation resumes.
+## Historical non-native checkpoint
 
-**Remaining critical path:**
+The 2026-08-08 bootstrap was technically operational but failed its security
+gate after a reversible proxy credential representation entered the Copilot
+transcript. The evidence run remains permanently failed and must not be
+rewritten or relabeled.
 
-1. Finish/read the MCP bounded-state review.
-2. Build the trace/coverage/MCP evidence inspector in the UI.
-3. Add append-only evidence recording and live acceptance.
-4. Run the clean post-rotation non-native canary-negative checkpoint; retain
-   the historical security-invalid run unchanged.
+The next acceptance run must use a new evidence ID, secret-safe proxy
+configuration, fresh processes after rotation, and raw/base64/URL-encoded
+canary scans.
 
-**Resume directory:**
+## Remaining critical path
 
-```powershell
-cd C:\Users\lzautke\dev\fintech-marketplace\.worktrees\copilot-otel-implementation
-```
+1. Complete the clean post-rotation non-native checkpoint.
+2. Finish the append-only evidence recorder and verifier.
+3. Run full parent-agent -> MCP peer -> native OTel -> UI acceptance.
+4. Keep `main` unchanged until the development acceptance gate passes.
+
+## Active invariants
+
+- Preserve the failed evidence run and append corrections only.
+- Keep native transcript as the conversation-fidelity lane and native OTel as
+  the execution, usage, and timing lane.
+- Keep bridge, hooks, Collector, UI, and local MCP traffic on loopback/private
+  WSL paths without proxy credentials.
+- Keep exactly one live `~/.copilot/hooks/*.json` observer configuration.

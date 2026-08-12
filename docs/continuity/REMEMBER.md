@@ -119,3 +119,13 @@ _Append-only durable facts, invariants, and pitfalls. Do not delete; correct wit
 - **Platform note:** this repo is developed on Windows (`C:\Users\me\dev\fintech-marketplace`) but all scripts are bash; run build/guard commands from Git Bash, not PowerShell/cmd. `jq` 1.8.1 confirmed present on this machine.
 - **Copilot CLI constraint:** the guard ships as repo-scope `.github/hooks/` rather than a Copilot plugin bundle *specifically* because plugin-defined `preToolUse` hooks don't fire in Copilot CLI (upstream bug github/copilot-cli#2540, open as of README's writing). Don't "clean up" that layout without re-checking the upstream issue status first.
 - **Naming convention drives tooling:** in `build/build.sh`'s Copilot conversion step, agent names matching `*auditor|*code-reviewer|microservice-architect` get read-only tools (`read search`); everything else gets `read edit search shell`. New reviewer/auditor agents must follow that naming pattern to inherit read-only tiering automatically.
+
+## 2026-08-08 (comprehensive OTel bootstrap)
+
+- **Invariant:** a technically successful pipeline run is still a failed verification run if the verification process exposes a credential. Preserve the evidence and rerun under a new ID; never relabel or overwrite the original.
+- **Security fact:** run `2026-08-08T13-43-32-0600_bootstrap-nonnative-01` printed a reversible base64 enterprise proxy credential into the Copilot transcript. Rotation is required before continuing.
+- **Networking fact:** this WSL installation does not forward Docker ports bound to the distro loopback onto Windows localhost. The bootstrap used Docker publishes on the private WSL vNIC plus a Windows `127.0.0.1` TCP forwarder.
+- **Aspire fact:** Aspire 9.5.2 OTLP/HTTP port 18890 expects protobuf. Collector 0.157.0 forwarding produced invalid-wire-type errors until the Collector → Aspire hop changed to OTLP/gRPC port 18889.
+- **Package-manager fact:** Node 24 behind this enterprise proxy requires both `NODE_USE_ENV_PROXY=1` and `NODE_USE_SYSTEM_CA=1`. Do not disable TLS verification.
+- **Version fact:** invoke package checks from each package directory. Root Corepack selected pnpm 11.20.0, while `copilot-otel-bridge` is pinned to pnpm 10.15.0 and rejects the mismatch.
+- **Evidence fact:** `verification.json` is SHA-256 `C70E1A0460E6A99D8AAC4D55FC6C0545CDF5B70F14AAEC99B87C37C14CEEDB1F`; append-only correction `001` is `E63712EA513B59EBCC07C1D155D3BBAEA33C474CA73F12536185B817592A8BBF`.

@@ -57,6 +57,31 @@ history; the checklist above is the active execution state.
 - [ ] Implement the credentialless local proxy gateway.
 - [ ] Run a new append-only non-native checkpoint with canary leakage scans.
 - [ ] Mark `bootstrap-planning-otel` done only after the clean checkpoint passes.
+## Blocked — 2026-08-08 comprehensive OTel bootstrap
+
+- [x] Create isolated worktree/branch `feat/copilot-otel-comprehensive` at `37bc50b`.
+- [x] Install Docker CE 29.7.2 + Compose 5.4.0 in WSL2 and configure systemd.
+- [x] Validate existing packages: `agent-fannypack/mcp` 8/8, `copilot-mcp` 5/5, `copilot-otel-bridge` 34/34.
+- [x] Start bridge, durable Collector, Aspire, and Windows loopback forwarding.
+- [x] Install exactly one 14-event user hook configuration.
+- [x] Live-fire real successful Copilot session `cc2d319a-897d-4a78-84ff-7ac4910ff239`.
+- [x] Prove the session in ledger, APIs, custom UI, Collector JSONL, and Aspire UI.
+- [x] Seal append-only run `2026-08-08T13-43-32-0600_bootstrap-nonnative-01` as a recorded failure and append correction `001`.
+- [ ] **BLOCKER:** rotate the enterprise proxy credential printed in reversible base64 form into the Copilot transcript.
+- [ ] Rerun Task 0 under a new evidence run ID with secret-safe Docker proxy configuration.
+- [ ] After a clean pass, mark SQL todo `bootstrap-planning-otel` done and unblock `freeze-research-workspace`.
+
+## Pending — approved comprehensive pipeline
+
+- [ ] Freeze research/workspace baseline and refresh CodeMunch/DocMunch indexes.
+- [ ] Centralize deterministic redaction across bridge, Collector, APIs/UI, and evidence.
+- [ ] Separate native OTel ingestion from native transcript parsing.
+- [ ] Implement source coverage ledger and deterministic correlation.
+- [ ] Instrument MCP `_meta` W3C propagation and MCP server/client semantics.
+- [ ] Harden the WSL Collector/Aspire stack and user hook/MCP installers.
+- [ ] Build the React forensic UI and evidence inspector.
+- [ ] Build the append-only evidence recorder/verifier.
+- [ ] Run recorded passing and intentional-failure parent Copilot → peer Copilot acceptance runs.
 
 ## Done — 2026-08-06 late (conversation replica, branch `feat/copilot-otel-replica`, pushed)
 

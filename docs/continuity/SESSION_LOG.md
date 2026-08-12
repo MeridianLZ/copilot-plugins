@@ -56,6 +56,16 @@ _Newest first._
 - **Gate:** user reports remote rotation, but the current long-lived process still
   carries the exposed fingerprint. Restart/cleanup and a clean canary-negative
   non-native run are mandatory before downstream work.
+## 2026-08-08 — comprehensive OTel Task 0 technically proven, sealed failed on credential exposure
+
+- **Plan/go-signal:** began the approved comprehensive Copilot conversation OTel plan using `executing-plans`; created required isolated worktree `.worktrees/copilot-otel-comprehensive` and branch `feat/copilot-otel-comprehensive`. Safety commit `37bc50b` ignores `.worktrees/`.
+- **Environment:** installed Docker CE 29.7.2, containerd, Buildx, and Compose 5.4.0 in WSL2 Ubuntu 26.04; enabled systemd Docker service and user access. Node package traffic required `NODE_USE_ENV_PROXY=1` + `NODE_USE_SYSTEM_CA=1`. The large `@github/copilot-win32-x64@1.0.78` registry transfer failed through pnpm, so its independently downloaded tarball was SHA-512-verified against the lockfile before restoring the package slot.
+- **Baseline:** fresh checks passed: `agent-fannypack/mcp` 8/8, `copilot-mcp` 5/5, `copilot-otel-bridge` 34/34. Bridge must use its pinned pnpm 10.15.0; root Corepack selected pnpm 11.20.0 and correctly failed the bridge's version gate.
+- **Runtime:** session-local Collector 0.157.0 writes durable traces and forwards via OTLP/gRPC to Aspire 9.5.2; bridge runs on Windows. Because WSL localhost forwarding is disabled, a Windows loopback TCP forwarder maps `127.0.0.1` to the private WSL vNIC. Health checks returned 200 for bridge, Collector, and Aspire.
+- **Hook/live-fire proof:** applied exactly one user hook JSON with all 14 events and hash content mode. Real successful Copilot session `cc2d319a-897d-4a78-84ff-7ac4910ff239` executed one PowerShell tool. Evidence: 8 ledger events, 11 projected spans, 38 session-ID occurrences in Collector trace JSONL, exact custom UI conversation, Aspire hydrated UI showing `github.copilot.hook.turn` and `.session`.
+- **Aspire correction:** initial OTLP/HTTP forwarding sent JSON bytes to Aspire's protobuf-only endpoint and returned 500. Switched Collector → Aspire to OTLP/gRPC `18889`; subsequent batches exported without errors.
+- **Security incident / terminal state:** a Docker systemd proxy command accidentally printed a reversible base64-encoded enterprise proxy credential into the Copilot transcript. The run was not relabeled as success. Evidence run `2026-08-08T13-43-32-0600_bootstrap-nonnative-01` is sealed `failed` (`security_incident`), verification SHA-256 `C70E1A0460E6A99D8AAC4D55FC6C0545CDF5B70F14AAEC99B87C37C14CEEDB1F`. Correction `001` preserves the original record and fixes Aspire result-field bookkeeping; SHA-256 `E63712EA513B59EBCC07C1D155D3BBAEA33C474CA73F12536185B817592A8BBF`.
+- **Blocker:** rotate the proxy credential, then rerun Task 0 with a new run ID. Do not proceed to native full-content OTel or dependent implementation tasks before a clean checkpoint.
 
 ## 2026-08-06 (latest) - hook-telemetry FAQ, container replica mount, PR #1
 
