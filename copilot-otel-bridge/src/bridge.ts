@@ -11,6 +11,7 @@ import { conversationToMarkdown, projectConversation } from './conversation-proj
 import { createPayloadDeduper } from './dedupe.js';
 import { NativeSessionCache } from './native-cache.js';
 import { NativeOtelCache } from './native-otel.js';
+import { listNativeSessions } from './native-session-listing.js';
 import type { NativeEvent } from './native-session.js';
 import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } from './trace-projector.js';
 import { correlateSources, type CoverageEntry } from './correlation.js';
@@ -238,7 +239,15 @@ async function main(): Promise<void> {
       }
       if (request.method === 'GET' && url.pathname === '/api/sessions') {
         await ingestTail;
-        sendEtagJson(request, response, 200, { sessions: projectSessions(await readLedger(config.eventsFile)) });
+        const ledgerSessions = projectSessions(await readLedger(config.eventsFile));
+        const known = new Set(ledgerSessions.map((session) => session.session_id));
+        const nativeSessions = (await listNativeSessions(config.copilotHome)).filter(
+          (session) => !known.has(session.session_id)
+        );
+        const sessions = [...ledgerSessions, ...nativeSessions].sort(
+          (left, right) => right.last_event_at_ms - left.last_event_at_ms
+        );
+        sendEtagJson(request, response, 200, { sessions });
         return;
       }
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {

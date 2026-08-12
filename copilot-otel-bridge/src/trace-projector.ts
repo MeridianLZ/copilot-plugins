@@ -42,6 +42,7 @@ export interface SessionSummary {
   ended_at_ms?: number;
   last_event_at_ms: number;
   status: ProjectedStatus;
+  source?: 'hook' | 'native';
   end_reason?: string;
   cwd?: string;
   event_count: number;
