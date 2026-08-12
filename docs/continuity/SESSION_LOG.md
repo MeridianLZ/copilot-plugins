@@ -2,6 +2,35 @@
 
 _Newest first._
 
+## 2026-08-12 (implementation) — remediation slice: hook overlay, evidence, MCP stdio, status reconciliation
+
+- Implemented and committed 5 real, tested slices of the remediation plan
+  directly (no subagent delegation — worked file-by-file with TDD, verifying
+  `pnpm check` green in the affected package after each slice):
+  1. `25ece0e` — all 14 hook events now overlay in native-first conversation
+     projection (was a 4-event allow-list), grouped under a new
+     `governance` `ConversationNodeKind` per turn/session host.
+  2. `43ad8e3` — native OTel evidence (signal/model/usage/attributes/
+     resource/scope/validity/redaction/source lineage) now survives
+     `coverage.ts`/`correlation.ts` instead of being reduced to identity
+     fields; new `GET /api/sessions/:id/sources/:sourceId` detail route;
+     paginated summary rows stay lightweight (`has_evidence` flag only).
+  3. `bbe7ccc` — UI coverage rows are clickable/keyboard-selectable and
+     lazy-fetch the new detail route into an "Evidence detail" panel.
+  4. `9e8fb8d` — MCP stdio W3C trace-context propagation via a proof-tested
+     `ContextPropagatingStdioTransport` wrapper (uses `serveStdio()`'s
+     bring-your-own-transport option; standard `params._meta`, no custom
+     wire field; `AsyncLocalStorage`-scoped per message).
+  5. `265f6ed` — `reconcileTerminalStatus()` fixes a real bug: document
+     status previously stuck at native 'open' forever whenever the native
+     transcript never got `session.shutdown`, even when hooks closed
+     cleanly. Now explicit-error > recovered > ok > open, with disagreement
+     surfaced as `status_conflict`/`status_evidence` instead of hidden.
+- Final verification: `copilot-otel-bridge` 91/91 tests + typecheck + build;
+  `copilot-mcp` 23/23 tests + typecheck + build. Both green.
+- Remaining plan scope (Tasks 2, 5, 9 full, 11, 12) intentionally deferred —
+  documented in `CURRENT_TASK_STATE.md` rather than claimed done.
+
 ## 2026-08-12 — annotated bibliography and verbatim plan documentation
 
 - Created `docs/otel-remediation/README.md`.

@@ -1,20 +1,27 @@
 # TASKS
 
-## Current checkpoint — 2026-08-12 14:15 MDT
+## Current checkpoint — 2026-08-12 14:55 MDT
 
 - [x] Audit 25 documents / 769 sections and current replication blockers.
 - [x] Research OTel, GenAI, Copilot, MCP, W3C, and trace UI sources.
 - [x] Write annotated bibliography with descriptive active hyperlinks.
 - [x] Copy implementation plan verbatim into repository `docs/`.
 - [x] Refresh all six canonical continuity files.
-- [ ] Create canonical conversation identity and exact-ID joins.
-- [ ] Preserve complete sanitized native trace/metric/log evidence.
-- [ ] Keep evidence through coverage/correlation and project all links/events.
-- [ ] Unify emitted/projected hook contracts and terminal status.
-- [ ] Display all telemetry fields in searchable raw/normalized inspector.
-- [ ] Add MCP stdio trace-context propagation.
-- [ ] Prove 100% source-field accounting.
-- [ ] Run full checks and fresh all-lane live deployment.
+- [x] Overlay all 14 hook events in native-first conversation (`25ece0e`).
+- [x] Preserve native OTel evidence through coverage/correlation; add
+  `/sources/:sourceId` detail API (`43ad8e3`).
+- [x] Add clickable evidence-detail UI panel (`bbe7ccc`).
+- [x] Add MCP stdio W3C trace-context propagation (`9e8fb8d`).
+- [x] Reconcile native/hook terminal status divergence (`265f6ed`).
+- [ ] Create dedicated canonical conversation identity module with exact-ID
+  join precedence tests (plan Task 2).
+- [ ] Unify emitted/projected hook span contract (plan Task 5).
+- [ ] Full generic multi-section forensic inspector: raw/normalized toggle,
+  attribute namespace search, link click-through, field-accounting counter
+  (plan Task 9, beyond the evidence-detail panel already shipped).
+- [ ] Machine-checked 100% source-field accounting test (plan Task 11).
+- [ ] Fresh live all-lane deployment + `live-validation.md` evidence
+  (plan Task 12).
 
 The older task sections remain durable history. This checklist is active.
 

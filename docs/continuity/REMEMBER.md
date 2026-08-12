@@ -2,6 +2,36 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-12 (implementation) — remediation slice facts
+
+- **Fact:** `serveStdio()` from `@modelcontextprotocol/server/stdio` accepts
+  a `transport` option (bring-your-own-transport) — this is how per-message
+  W3C trace-context propagation was added to stdio without any custom wire
+  field: `ContextPropagatingStdioTransport` wraps `StdioServerTransport`,
+  intercepts `onmessage`, extracts `params._meta`, and scopes it with
+  `AsyncLocalStorage` via `runWithPeerRequestContext()` before forwarding to
+  the real handler. Verified end-to-end with a fake inner `Transport` (no
+  real streams needed) proving per-message scoping does not leak between
+  calls on the same pinned connection.
+- **Pitfall (found and fixed):** `ConversationDocument.status` was computed
+  as `root.status ?? sessionSpan?.status ?? 'open'` — since `root.status`
+  (native) starts as the literal string `'open'` (not `undefined`), `??`
+  never fell through to the hook lane's status even when hooks closed
+  cleanly and native never got `session.shutdown`. Any reducer over two
+  optional-but-string-typed status sources must treat non-terminal states
+  (`'open'`) as "no explicit evidence", not skip via `??`/`||` alone.
+- **Invariant:** `SourceRecord.evidence` (added this session) carries the
+  full sanitized native OTel record through `buildSourceRecords()` →
+  `correlateSources()` unchanged; it must never appear in paginated
+  `/sources` or `/coverage` summary rows (`has_evidence` flag only) —
+  only `GET /api/sessions/:id/sources/:sourceId` returns the full blob.
+- **Invariant:** All 14 hook events overlay in native-first conversation
+  projection now, nested under one `governance` `ConversationNodeKind`
+  child per turn/session host (not flat siblings of user/assistant
+  bubbles) — every event stays individually selectable and chronological.
+- **Test-count facts:** `copilot-otel-bridge` gate is now **91** node:test
+  cases (was 82); `copilot-mcp` gate is now **23** (was 18).
+
 ## 2026-08-12 — lossless telemetry remediation invariants
 
 - **Invariant:** Every supported telemetry source field must end with one
