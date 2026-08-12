@@ -8,6 +8,8 @@ import {
   withCheckIn,
 } from '@agent-fannypack/mcp';
 import type { CopilotBridge, PeerToolLinkContext } from './bridge/copilot-bridge.js';
+import { loadConfig } from './config.js';
+import { loadPersonas, type Persona } from './personas.js';
 import { activePeerRequestContext, sanitizePeerRequestId, validateCarrier, type TelemetryCarrier } from './telemetry-context.js';
 
 export const SERVER_NAME = 'copilot-mcp';
@@ -28,6 +30,8 @@ export interface BuildServerOptions {
   peerRequestId?: string;
   /** Best-effort transport hint (stdio/http/ws). */
   transport?: string;
+  /** Persona tools to expose; defaults to the configured copilot-home agents. */
+  personas?: Persona[];
 }
 
 const sessionInfoSchema = z.object({
@@ -288,6 +292,53 @@ export function buildServer(opts: BuildServerOptions): McpServer {
       }
     }),
   );
+
+  const personas = opts.personas ?? loadPersonas(loadConfig().personaDir);
+  for (const persona of personas) {
+    server.registerTool(
+      persona.name,
+      {
+        title: `Ask peer copilot ${persona.name}`,
+        description: persona.description,
+        inputSchema: z.object({
+          prompt: z.string().describe(`The question/task for ${persona.name}`),
+          session_id: z.string().optional().describe("Continue this peer's existing session"),
+          timeout_ms: z.number().positive().optional().describe('Turn timeout override'),
+        }),
+        outputSchema: z.object({
+          answer: z.string(),
+          session_id: z.string(),
+          turn_ms: z.number(),
+          model: z.string().optional(),
+          tool_calls: z.array(z.object({ tool: z.string(), status: z.enum(['complete', 'failed']) })),
+        }),
+      },
+      withCheckIn(
+        timer,
+        async (args: { prompt: string; session_id?: string; timeout_ms?: number }) => {
+          const peer = resolvePeerContext(opts, persona.name);
+          try {
+            const result = await bridge.ask({
+              ...args,
+              persona: {
+                name: persona.name,
+                displayName: persona.name.charAt(0).toUpperCase() + persona.name.slice(1),
+                description: persona.description,
+                prompt: persona.systemMessage,
+                ...(persona.model !== undefined ? { model: persona.model } : {}),
+              },
+            }, peer);
+            recordPeer(bridge, peer, 'complete', result.session_id);
+            const { model, ...rest } = result;
+            return textResult({ ...rest, ...(model !== undefined ? { model } : {}) });
+          } catch (error) {
+            recordPeer(bridge, peer, 'failed', args.session_id);
+            throw error;
+          }
+        },
+      ),
+    );
+  }
 
   return server;
 }

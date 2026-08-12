@@ -15,6 +15,8 @@ export interface CopilotMcpConfig {
   /** Spawn a system-installed Copilot CLI instead of the SDK-bundled runtime. */
   cliPath: string | undefined;
   askTimeoutMs: number;
+  /** Root dir of copilot-home agent definitions. */
+  personaDir: string;
 }
 
 function packageRoot(): string {
@@ -73,5 +75,8 @@ export function loadConfig(): CopilotMcpConfig {
     cliUrl: process.env['COPILOT_MCP_CLI_URL'] || undefined,
     cliPath: resolveCliPath(process.env['COPILOT_MCP_CLI_PATH'] || process.env['COPILOT_CLI_PATH']),
     askTimeoutMs: Number(process.env['COPILOT_MCP_ASK_TIMEOUT_MS'] ?? 300_000),
+    personaDir:
+      process.env['COPILOT_MCP_PERSONA_DIR'] ??
+      path.resolve(packageRoot(), '..', 'copilot-plugin', 'agents'),
   };
 }

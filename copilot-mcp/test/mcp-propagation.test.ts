@@ -235,6 +235,7 @@ class BridgeWithFakeClient extends CopilotBridge {
       cliUrl: undefined,
       cliPath: undefined,
       askTimeoutMs: 30_000,
+      personaDir: '',
     });
   }
 

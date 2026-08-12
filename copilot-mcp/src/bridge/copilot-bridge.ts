@@ -8,6 +8,14 @@ import {
 import type { CopilotMcpConfig } from '../config.js';
 import { sanitizePeerRequestId, traceContextIds, validateCarrier, type TelemetryCarrier } from '../telemetry-context.js';
 
+export interface SessionPersona {
+  name: string;
+  displayName?: string;
+  description?: string;
+  prompt: string;
+  model?: string;
+}
+
 export interface AskResult {
   answer: string;
   session_id: string;
@@ -193,11 +201,35 @@ export class CopilotBridge {
     }, key);
   }
 
-  async createSession(model?: string, peer?: PeerToolLinkContext): Promise<SessionInfo> {
+  async createSession(
+    modelOrOptions: string | { model?: string; systemMessage?: string; persona?: SessionPersona } | undefined = undefined,
+    peer?: PeerToolLinkContext,
+  ): Promise<SessionInfo> {
+    const opts = typeof modelOrOptions === 'string' || modelOrOptions === undefined
+      ? { model: modelOrOptions }
+      : modelOrOptions;
     const client = await this.client();
-    const chosenModel = model ?? this.config.model;
+    const chosenModel = opts.model ?? opts.persona?.model ?? this.config.model;
     const session = await client.createSession({
       ...(chosenModel !== undefined ? { model: chosenModel } : {}),
+      ...(opts.systemMessage !== undefined
+        ? { systemMessage: { mode: 'append' as const, content: opts.systemMessage } }
+        : {}),
+      ...(opts.persona !== undefined
+        ? {
+            customAgents: [
+              {
+                name: opts.persona.name,
+                ...(opts.persona.displayName !== undefined ? { displayName: opts.persona.displayName } : {}),
+                ...(opts.persona.description !== undefined ? { description: opts.persona.description } : {}),
+                prompt: opts.persona.prompt,
+                ...(chosenModel !== undefined ? { model: chosenModel } : {}),
+                infer: false,
+              },
+            ],
+            agent: opts.persona.name,
+          }
+        : {}),
       onPermissionRequest: this.#permissionHandler(),
     });
     const info = this.#track(session, chosenModel);
@@ -259,13 +291,16 @@ export class CopilotBridge {
     };
   }
 
-  async #resolve(sessionId: string | undefined, model?: string): Promise<TrackedSession> {
+  async #resolve(
+    sessionId: string | undefined,
+    opts: { model?: string; systemMessage?: string; persona?: SessionPersona } = {},
+  ): Promise<TrackedSession> {
     if (sessionId !== undefined) {
       const tracked = this.#sessions.get(sessionId);
       if (!tracked) throw new Error(`unknown session_id: ${sessionId}`);
       return tracked;
     }
-    const info = await this.createSession(model);
+    const info = await this.createSession(opts);
     const tracked = this.#sessions.get(info.session_id);
     if (!tracked) throw new Error('session vanished during creation');
     return tracked;
@@ -281,8 +316,14 @@ export class CopilotBridge {
     session_id?: string;
     model?: string;
     timeout_ms?: number;
+    systemMessage?: string;
+    persona?: SessionPersona;
   }, peer?: PeerToolLinkContext): Promise<AskResult> {
-    const tracked = await this.#resolve(opts.session_id, opts.model);
+    const tracked = await this.#resolve(opts.session_id, {
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      ...(opts.systemMessage !== undefined ? { systemMessage: opts.systemMessage } : {}),
+      ...(opts.persona !== undefined ? { persona: opts.persona } : {}),
+    });
     const timeout = opts.timeout_ms ?? this.config.askTimeoutMs;
     const started = Date.now();
     const eventsBefore = tracked.events.length;
