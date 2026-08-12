@@ -169,6 +169,7 @@ __marimo__/
 .turbo/
 .playwright-mcp/
 .worktrees/
+copilot-otel-bridge/.copilot/
 **/test-results/
 *.tsbuildinfo
 **/node_modules/
