@@ -126,6 +126,47 @@ test('parseNativeOtelLines preserves complete sanitized OTLP entity and unknown 
     }]
   });
 
+  test('parseNativeOtelLines ingests Copilot native file-export span records', () => {
+    const records = parseNativeOtelLines([JSON.stringify({
+      type: 'span',
+      traceId: 'trace-live',
+      spanId: 'span-live',
+      parentSpanId: 'parent-live',
+      name: 'invoke_agent',
+      startTime: [1_723_298_400, 500_000_000],
+      endTime: [1_723_298_401, 0],
+      attributes: {
+        'gen_ai.conversation.id': 'session-live',
+        'gen_ai.request.model': 'gpt-5.6-luna',
+        'gen_ai.tool.call.id': 'tool-live'
+      }
+    })], 'native-otel-live.jsonl');
+
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.signal, 'trace');
+    assert.equal(records[0]?.session_id, 'session-live');
+    assert.equal(records[0]?.trace_id, 'trace-live');
+    assert.equal(records[0]?.observed_at_unix_ms, 1_723_298_400_500);
+    assert.equal(records[0]?.identity?.tool_call_id, 'tool-live');
+  });
+
+  test('parseNativeOtelLines ingests Copilot native file-export metric data points', () => {
+    const records = parseNativeOtelLines([JSON.stringify({
+      type: 'metric',
+      name: 'gen_ai.client.operation.duration',
+      dataPoints: [{
+        attributes: { 'gen_ai.operation.name': 'invoke_agent' },
+        startTime: [1_723_298_400, 500_000_000],
+        endTime: [1_723_298_401, 0],
+        value: { count: 1, sum: 2.5 }
+      }]
+    })], 'native-otel-live.jsonl');
+    assert.equal(records.length, 1);
+    assert.equal(records[0]?.signal, 'metric');
+    assert.equal(records[0]?.observed_at_unix_ms, 1_723_298_400_500);
+    assert.equal(records[0]?.attributes['metric.name'], 'gen_ai.client.operation.duration');
+  });
+
   const record = parseNativeOtelLines([input], 'fixtures/lossless.jsonl')[0];
   assert.ok(record);
   const rawEntity = JSON.stringify(record.raw_entity);

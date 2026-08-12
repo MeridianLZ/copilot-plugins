@@ -124,6 +124,13 @@ function parseFiniteNumber(value: unknown): number | undefined {
 }
 
 function parseEpochMs(value: unknown): number | undefined {
+  if (Array.isArray(value) && value.length >= 2) {
+    const seconds = parseFiniteNumber(value[0]);
+    const nanos = parseFiniteNumber(value[1]);
+    if (seconds !== undefined && nanos !== undefined) {
+      return Math.trunc(seconds * 1_000 + nanos / 1_000_000);
+    }
+  }
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (trimmed.length === 0) return undefined;
@@ -313,6 +320,10 @@ function inferSignalFromSourceFile(sourceFile: string): NativeSignal {
 function inferSignal(line: Record<string, unknown>, sourceFile: string): NativeSignal {
   const hint = stringField(line, 'signal', 'signal_type');
   if (hint === 'trace' || hint === 'metric' || hint === 'log') return hint;
+  const type = stringField(line, 'type');
+  if (type === 'span') return 'trace';
+  if (type === 'metric') return 'metric';
+  if (type === 'log' || type === 'logRecord' || type === 'log_record') return 'log';
   if (Array.isArray(getField(line, 'resourceSpans', 'resource_spans'))) return 'trace';
   if (Array.isArray(getField(line, 'resourceMetrics', 'resource_metrics'))) return 'metric';
   if (Array.isArray(getField(line, 'resourceLogs', 'resource_logs'))) return 'log';
@@ -331,8 +342,12 @@ function extractObservedAtUnixMs(...objects: ReadonlyArray<Record<string, unknow
     'time_unix_nano',
     'startTimeUnixNano',
     'start_time_unix_nano',
+    'startTime',
+    'start_time',
     'endTimeUnixNano',
     'end_time_unix_nano',
+    'endTime',
+    'end_time',
     'timestamp'
   ];
   for (const object of objects) {
@@ -391,6 +406,9 @@ function parseTraceCandidates(line: Record<string, unknown>): CandidateRecord[] 
 
 function collectMetricPoints(metric: Record<string, unknown>): { kind: string; point: Record<string, unknown> }[] {
   const output: { kind: string; point: Record<string, unknown> }[] = [];
+  for (const point of arrayField(metric, 'dataPoints', 'data_points')) {
+    if (isRecord(point)) output.push({ kind: 'data_point', point });
+  }
   const containers: Array<[string, Record<string, unknown> | undefined]> = [
     ['sum', recordField(metric, 'sum')],
     ['gauge', recordField(metric, 'gauge')],
@@ -530,7 +548,16 @@ function parseLogCandidates(line: Record<string, unknown>): CandidateRecord[] {
 }
 
 function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown>): CandidateRecord {
-  const attributes = attributesToMap(getField(line, 'attributes'));
+  const directPoint = arrayField(line, 'dataPoints', 'data_points')
+    .find((value): value is Record<string, unknown> => isRecord(value));
+  const attributes = mergeMaps(
+    attributesToMap(getField(line, 'attributes')),
+    directPoint ? attributesToMap(getField(directPoint, 'attributes')) : {}
+  );
+  const metricName = stringField(line, 'name');
+  const metricUnit = stringField(line, 'unit');
+  if (signal === 'metric' && metricName !== undefined) attributes['metric.name'] = metricName;
+  if (signal === 'metric' && metricUnit !== undefined) attributes['metric.unit'] = metricUnit;
   const resource = resourceToMap(getField(line, 'resource'));
   const instrumentationScope = scopeToMap(
     getField(line, 'instrumentationScope', 'instrumentation_scope', 'scope')
@@ -540,7 +567,7 @@ function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown
   return {
     signal,
     line,
-    entity: line,
+    entity: directPoint ?? line,
     attributes,
     resource,
     instrumentationScope,
@@ -548,7 +575,7 @@ function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown
     scopeContainer: recordField(line, 'instrumentationScope', 'instrumentation_scope', 'scope'),
     resourceSchemaUrl: stringField(line, 'resourceSchemaUrl', 'resource_schema_url'),
     scopeSchemaUrl: stringField(line, 'scopeSchemaUrl', 'scope_schema_url'),
-    observedAtUnixMs: extractObservedAtUnixMs(line),
+    observedAtUnixMs: extractObservedAtUnixMs(directPoint ?? line, line),
     traceId: stringField(line, 'traceId', 'trace_id'),
     spanId: stringField(line, 'spanId', 'span_id'),
     parentSpanId: stringField(line, 'parentSpanId', 'parent_span_id')
@@ -762,7 +789,9 @@ function normalizeCandidate(
     'session.id',
     'copilot.session.id',
     'github.copilot.session_id',
-    'github.copilot.session.id'
+    'github.copilot.session.id',
+    'gen_ai.conversation.id',
+    'conversation.id'
   ]);
   const turnId = extractStringFromLookupOrObject(lookup, candidate.entity, candidate.line, [
     'turn_id',

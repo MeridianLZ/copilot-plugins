@@ -46,7 +46,7 @@ export const identityMatchKeys: readonly IdentityMatch[] = [
 ];
 
 const ALIASES: Readonly<Record<keyof ConversationIdentity, readonly string[]>> = {
-  session_id: ['session_id', 'sessionId', 'session.id', 'copilot.session.id', 'github.copilot.session.id'],
+  session_id: ['session_id', 'sessionId', 'session.id', 'copilot.session.id', 'github.copilot.session.id', 'gen_ai.conversation.id', 'conversation.id'],
   turn_id: ['turn_id', 'turnId', 'turn.id', 'copilot.turn.id', 'copilot.turn_id'],
   message_id: ['message_id', 'messageId', 'message.id', 'gen_ai.message.id'],
   tool_call_id: ['tool_call_id', 'toolCallId', 'tool.call.id', 'gen_ai.tool.call.id', 'copilot.tool.call.id'],

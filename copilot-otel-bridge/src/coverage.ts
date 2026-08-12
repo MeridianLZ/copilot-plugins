@@ -253,13 +253,13 @@ function buildNativeOtelRecords(sessionId: string, nativeOtelRecords: readonly N
   const safeSession = sanitizeOptionalId(sessionId) ?? sessionId;
   for (let index = 0; index < nativeOtelRecords.length; index++) {
     const record = nativeOtelRecords[index]!;
-    if (record.session_id !== sessionId) continue;
+    if (record.session_id !== undefined && record.session_id !== sessionId) continue;
     const source_id = sanitizeOptionalId(record.record_id) ?? `native-otel-${index + 1}`;
     const output: SourceRecord = {
       source_kind: 'native_otel',
       source_id,
       timestamp_ms: Number.isFinite(record.observed_at_unix_ms) ? Math.trunc(record.observed_at_unix_ms) : Number.NaN,
-      session_id: safeSession,
+      ...(record.session_id === sessionId ? { session_id: safeSession } : {}),
       ...(record.identity !== undefined ? { identity: record.identity } : {})
     };
     const traceId = sanitizeOptionalId(record.trace_id);

@@ -2,6 +2,21 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-12 (final implementation) — native exporter compatibility
+
+- **Fact:** Real Copilot native JSONL uses direct records with
+  `type:"span"`/`type:"metric"`, timestamp arrays `[seconds,nanos]`, and
+  metric `dataPoints` at the top level. Parser support must handle this shape
+  in addition to OTLP `resourceSpans`/`resourceMetrics`/`resourceLogs`.
+- **Invariant:** Native metric aggregates may have no conversation ID. Keep
+  them as visible unscoped evidence inside a bounded session-time attribution
+  window; never discard them at `record.session_id === sessionId` filtering.
+- **Fact:** Final live validation recorded 2 traces, 9 metrics, 1 sanitized
+  local log smoke, 20 transcript events, 5 hook events, 44 coverage rows, and
+  2,235 / 2,235 accounted fields.
+- **Invariant:** `docs/otel-remediation/live-validation.md` distinguishes
+  organic Copilot observations from explicitly labeled local lane smoke data.
+
 ## 2026-08-12 (implementation) — remediation slice facts
 
 - **Fact:** `serveStdio()` from `@modelcontextprotocol/server/stdio` accepts

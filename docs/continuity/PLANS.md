@@ -1,5 +1,17 @@
 # PLANS
 
+## Current status — 2026-08-12 17:30 MDT
+
+Implementation plan executed for planned local deployable scope. Canonical
+identity, raw OTLP evidence, all-lane evidence detail, shared hook span
+contract, field accounting, generic inspector, MCP stdio propagation, and
+live validation are complete and verified.
+
+Fresh evidence is in
+`docs/otel-remediation/live-validation.md`; audit status is in
+`docs/otel-span-conversation-audit.md`. Feature changes still need the final
+feature push and development merge/push after this last implementation slice.
+
 ## Current status — 2026-08-12 14:15 MDT
 
 Planning for complete Copilot telemetry replication is complete.

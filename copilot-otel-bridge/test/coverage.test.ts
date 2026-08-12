@@ -193,3 +193,22 @@ test('field accounting assigns every supported-lane evidence path a disposition 
   assert.equal(fields.some((field) => field.source_kind === 'native_otel' && field.path.startsWith('$.raw_')), true);
   assert.equal(fields.some((field) => field.source_kind === 'hook' && field.ui_target === 'evidence-detail-attributes'), true);
 });
+
+test('unscoped native metrics remain visible as evidence instead of being silently dropped', () => {
+  const { session_id: _sessionId, ...unscopedRecord } = nativeOtelRecord('other-session');
+  const records = buildSourceRecords({
+    sessionId: 'sess-metric-window',
+    hooks: [hookEnvelope('sess-metric-window')],
+    nativeEvents: [],
+    nativeOtelRecords: [{
+      ...unscopedRecord,
+      signal: 'metric',
+      observed_at_unix_ms: base + 500
+    }],
+    spans: []
+  });
+  const metric = records.find((record) => record.source_kind === 'native_otel');
+  assert.ok(metric);
+  assert.equal(metric?.session_id, undefined);
+  assert.equal(metric?.evidence?.['signal'], 'metric');
+});

@@ -2,6 +2,19 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-12 — verify against real exporter shape
+
+- Fixture-shaped OTLP envelopes are insufficient. Real Copilot native file
+  export uses direct `type:"span"`/`type:"metric"` records, timestamp tuples,
+  and top-level metric data points. A same-day deployment gate must parse a
+  real exporter file before calling lane support complete.
+- Aggregated metrics often lack conversation identity. Preserve them with
+  bounded temporal attribution and an explicit unscoped identity, then expose
+  their disposition instead of silently dropping them.
+- Field accounting is strongest when generated from the actual evidence tree:
+  every leaf gets a disposition and UI target, while unknown future fields
+  remain included automatically.
+
 ## 2026-08-12 — plan from the lossy seam, not ingestion
 
 - When telemetry arrives but UI lacks detail, compare source type, correlation
