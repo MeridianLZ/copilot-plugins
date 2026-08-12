@@ -64,7 +64,7 @@ export function initializeTelemetry(config: BridgeConfig): TelemetryRuntime {
   provider.register();
 
   return {
-    tracer: provider.getTracer('github-copilot-cli-hook-bridge', '1.0.0'),
+    tracer: provider.getTracer('copilot-cli-hook-bridge', '1.0.0'),
     forceFlush: () => provider.forceFlush(),
     shutdown: () => provider.shutdown()
   };

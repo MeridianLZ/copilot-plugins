@@ -14,5 +14,7 @@ if ([string]::IsNullOrWhiteSpace($Path)) {
 $env:COPILOT_OTEL_ENABLED = 'true'
 $env:COPILOT_OTEL_EXPORTER_TYPE = 'file'
 $env:COPILOT_OTEL_FILE_EXPORTER_PATH = (Resolve-Path -LiteralPath (Split-Path -Parent $Path) -ErrorAction Stop).Path + [IO.Path]::DirectorySeparatorChar + (Split-Path -Leaf $Path)
-$env:OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'false'
+$env:COPILOT_OTEL_SOURCE_NAME = 'copilot'
+$env:OTEL_SERVICE_NAME = 'copilot'
+$env:OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'true'
 Write-Host "Copilot native OTel JSONL -> $env:COPILOT_OTEL_FILE_EXPORTER_PATH"
