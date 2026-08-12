@@ -1,9 +1,9 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type OutgoingHttpHeaders, type ServerResponse } from 'node:http';
 import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, withValidatedLocalTelemetry } from './config.js';
-import { createEnvelope } from './envelope.js';
+import { createEnvelope, sanitizeEnvelope } from './envelope.js';
 import { appendJsonLine, drainSpool, ensureDataDirectories } from './io.js';
 import { initializeTelemetry } from './otel.js';
 import { SpanAssembler } from './span-assembler.js';
@@ -16,6 +16,7 @@ import { eventTimeMs, parseLedgerLines, projectSessions, projectSessionTrace } f
 import { correlateSources, type CoverageEntry } from './correlation.js';
 import { buildSourceRecords, summarizeCoverage, type CoverageTotals } from './coverage.js';
 import { isCopilotHookEventName, isHookEnvelope, type HookEnvelope } from './types.js';
+import { etagFor, etagsMatch, pageSlice } from './api-contract.js';
 
 function uiIndexPath(): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -54,13 +55,30 @@ function requestHeader(request: IncomingMessage, name: string): string | undefin
   return Array.isArray(value) ? value[0] : value;
 }
 
-function sendJson(response: ServerResponse, status: number, body: unknown): void {
+function sendJson(response: ServerResponse, status: number, body: unknown, headers: OutgoingHttpHeaders = {}): void {
   const serialized = JSON.stringify(body);
   response.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(serialized)
+    'content-length': Buffer.byteLength(serialized),
+    ...headers
   });
   response.end(serialized);
+}
+
+function sendEtagJson(
+  request: IncomingMessage,
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  etagValue: unknown = body
+): void {
+  const etag = etagFor(etagValue);
+  if (etagsMatch(requestHeader(request, 'if-none-match'), etag)) {
+    response.writeHead(304, { etag });
+    response.end();
+    return;
+  }
+  sendJson(response, status, body, { etag });
 }
 
 function configuredEventFromRequest(request: IncomingMessage, pathname: string): string | undefined {
@@ -220,7 +238,7 @@ async function main(): Promise<void> {
       }
       if (request.method === 'GET' && url.pathname === '/api/sessions') {
         await ingestTail;
-        sendJson(response, 200, { sessions: projectSessions(await readLedger(config.eventsFile)) });
+        sendEtagJson(request, response, 200, { sessions: projectSessions(await readLedger(config.eventsFile)) });
         return;
       }
       if (request.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
@@ -229,7 +247,8 @@ async function main(): Promise<void> {
         const nativeOtelMatch = /^(.*)\/native-otel$/.exec(remainder);
         const conversationMatch = /^(.*)\/conversation(?:\.(md|json))?$/.exec(remainder);
         const coverageMatch = /^(.*)\/coverage$/.exec(remainder);
-        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? remainder;
+        const sourcesMatch = /^(.*)\/sources$/.exec(remainder);
+        const sessionId = nativeOtelMatch?.[1] ?? conversationMatch?.[1] ?? coverageMatch?.[1] ?? sourcesMatch?.[1] ?? remainder;
         const ledger = await readLedger(config.eventsFile);
         if (nativeOtelMatch) {
           const records = (await nativeOtelCache.getRecords())
@@ -242,24 +261,50 @@ async function main(): Promise<void> {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;
           }
-          sendJson(response, 200, {
-            records,
+          const page = pageSlice(records, url.searchParams.get('cursor') ?? undefined, url.searchParams.get('limit'));
+          const body = {
+            ...page,
+            records: page.items,
             count: records.length,
-            generated_at: new Date().toISOString()
-          });
+            session_id: sessionId
+          };
+          sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
           return;
         }
-        if (coverageMatch) {
+        if (coverageMatch || sourcesMatch) {
           const coverage = await buildSessionCoverage(sessionId, ledger);
           if (!coverage.known) {
             sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
             return;
           }
-          sendJson(response, 200, {
+          const records = coverage.entries.map((entry) => ({
+            ...entry,
+            kind: entry.source_kind,
+            match_method: entry.matched_by ?? 'session_id',
+            summary: entry.reason
+          }));
+          if (sourcesMatch) {
+            const kind = url.searchParams.get('kind');
+            if (kind !== null && !['hook', 'native_transcript', 'native_otel', 'mcp', 'evidence'].includes(kind)) {
+              sendJson(response, 400, { error: 'invalid_source_kind' });
+              return;
+            }
+            const filtered = kind ? records.filter((record) => record.source_kind === kind) : records;
+            const page = pageSlice(filtered, url.searchParams.get('cursor') ?? undefined, url.searchParams.get('limit'));
+            sendEtagJson(request, response, 200, page, { ...page, session_id: sessionId, generated_at: '' });
+            return;
+          }
+          const body = {
+            session_id: sessionId,
             entries: coverage.entries,
+            records,
             totals: coverage.totals,
+            total: coverage.totals.total,
+            by_source: coverage.totals.by_source,
+            by_disposition: coverage.totals.by_disposition,
             generated_at: new Date().toISOString()
-          });
+          };
+          sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
           return;
         }
         if (conversationMatch) {
@@ -280,7 +325,13 @@ async function main(): Promise<void> {
             response.end(markdown);
             return;
           }
-          sendJson(response, 200, conversation);
+          const page = pageSlice(
+            conversation.events,
+            url.searchParams.get('cursor') ?? undefined,
+            url.searchParams.get('limit')
+          );
+          const body = { ...conversation, events: page.items, next_cursor: page.next_cursor, total: page.total };
+          sendEtagJson(request, response, 200, body, { ...body, generated_at: '' });
           return;
         }
         const trace = projectSessionTrace(ledger, sessionId);
@@ -288,7 +339,7 @@ async function main(): Promise<void> {
           sendJson(response, 404, { error: 'session_not_found', session_id: sessionId });
           return;
         }
-        sendJson(response, 200, trace);
+        sendEtagJson(request, response, 200, trace);
         return;
       }
       if (request.method !== 'POST' || (url.pathname !== '/hooks' && !url.pathname.startsWith('/hooks/'))) {
@@ -300,7 +351,7 @@ async function main(): Promise<void> {
       const isEnvelope = isHookEnvelope(incoming);
       let envelope: HookEnvelope;
       if (isEnvelope) {
-        envelope = incoming;
+        envelope = sanitizeEnvelope(incoming, config);
       } else {
         const configuredEvent = configuredEventFromRequest(request, url.pathname);
         if (configuredEvent && !isCopilotHookEventName(configuredEvent) && !/^[A-Z]/.test(configuredEvent)) {
