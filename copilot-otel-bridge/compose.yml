@@ -27,7 +27,7 @@ services:
       COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS: ${COPILOT_TRACE_NATIVE_OTEL_MAX_RECORDS:-100000}
       COPILOT_HOME: /copilot-home
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
-      OTEL_SERVICE_NAME: github-copilot-cli-hook-bridge
+      OTEL_SERVICE_NAME: copilot-hook-bridge
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=development,service.namespace=agent-observability
     volumes:
       - ./.copilot/telemetry:/data

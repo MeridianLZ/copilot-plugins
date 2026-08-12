@@ -10,6 +10,7 @@ $env:COPILOT_OTEL_ENABLED = 'true'
 $env:COPILOT_OTEL_EXPORTER_TYPE = 'otlp-http'
 $env:OTEL_EXPORTER_OTLP_ENDPOINT = $Endpoint
 $env:OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
-$env:OTEL_SERVICE_NAME = 'github-copilot'
-$env:OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'false'
+$env:COPILOT_OTEL_SOURCE_NAME = 'copilot'
+$env:OTEL_SERVICE_NAME = 'copilot'
+$env:OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = 'true'
 Write-Host "Copilot native OTel -> $Endpoint (http/protobuf)"

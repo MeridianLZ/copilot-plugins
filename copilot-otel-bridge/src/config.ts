@@ -90,7 +90,7 @@ export function loadConfig(): BridgeConfig {
     consoleMode: consoleValue,
     otlpTracesEndpoint:
       process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? 'http://127.0.0.1:27432/v1/traces',
-    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'github-copilot-cli-hook-bridge',
+    serviceName: process.env['OTEL_SERVICE_NAME'] ?? 'copilot-hook-bridge',
     dedupeWindowMs: intFromEnv('COPILOT_TRACE_DEDUPE_WINDOW_MS', 10_000),
     copilotHome: process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot')
   };
