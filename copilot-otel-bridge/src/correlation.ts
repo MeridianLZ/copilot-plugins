@@ -21,6 +21,13 @@ export interface SourceRecord {
   turn_id?: string;
   tool_call_id?: string;
   session_id?: string;
+  /**
+   * Full sanitized evidence carried alongside identity fields so
+   * correlation never has to reduce native OTel signal/model/usage/
+   * attributes/resource/scope/status metadata before it reaches the UI.
+   * Already redacted upstream (native-otel.ts / native-session.ts).
+   */
+  evidence?: Record<string, unknown>;
 }
 
 export interface CoverageEntry extends SourceRecord {
@@ -91,6 +98,11 @@ function normalizeRecord(input: SourceRecord, index: number): SourceRecord {
   if (toolCallId !== undefined) normalized.tool_call_id = toolCallId;
   const sessionId = sanitizeOptionalId(input.session_id);
   if (sessionId !== undefined) normalized.session_id = sessionId;
+  // Evidence arrives already sanitized (redaction happens at the native-otel
+  // / native-session parse boundary); pass it through untouched so
+  // correlation never has to reduce signal/model/usage/attributes/resource/
+  // scope metadata before it reaches coverage/UI.
+  if (input.evidence !== undefined) normalized.evidence = input.evidence;
   return normalized;
 }
 
@@ -204,6 +216,7 @@ function finalizeEntry(entry: IndexedEntry): CoverageEntry {
   if (entry.session_id) finalized.session_id = sanitizeText(entry.session_id, MAX_ID_BYTES);
   if (canonicalId) finalized.canonical_id = canonicalId;
   if (entry.matched_by) finalized.matched_by = entry.matched_by;
+  if (entry.evidence !== undefined) finalized.evidence = entry.evidence;
   return finalized;
 }
 

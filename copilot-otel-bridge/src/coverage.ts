@@ -172,6 +172,24 @@ function buildNativeOtelRecords(sessionId: string, nativeOtelRecords: readonly N
     if (turnId !== undefined) output.turn_id = turnId;
     const toolCallId = sanitizeOptionalId(record.tool_call_id);
     if (toolCallId !== undefined) output.tool_call_id = toolCallId;
+    // Carry the complete sanitized native OTel record (signal, parent span,
+    // model, usage, attributes, resource, instrumentation scope, validity,
+    // and redaction accounting) so coverage/UI never has to reconstruct it
+    // from a reduced identity-only projection.
+    output.evidence = {
+      signal: record.signal,
+      parent_span_id: record.parent_span_id,
+      model: record.model,
+      usage: record.usage,
+      attributes: record.attributes,
+      resource: record.resource,
+      instrumentation_scope: record.instrumentation_scope,
+      content_disposition: record.content_disposition,
+      validity: record.validity,
+      source_file: record.source_file,
+      line_number: record.line_number,
+      source_hash: record.source_hash
+    };
     records.push(output);
   }
   return records;
@@ -220,6 +238,10 @@ export function buildSourceRecords(input: BuildSourceRecordsInput): SourceRecord
     if (toolCallId !== undefined) output.tool_call_id = toolCallId;
     const normalizedSessionId = sanitizeOptionalId(record.session_id);
     if (normalizedSessionId !== undefined) output.session_id = normalizedSessionId;
+    // Already-sanitized full evidence (native OTel signal/model/usage/
+    // attributes/resource/scope/etc.) must survive this final re-mapping
+    // pass, or every upstream preservation effort is discarded here instead.
+    if (record.evidence !== undefined) output.evidence = record.evidence;
     return output;
   });
 }

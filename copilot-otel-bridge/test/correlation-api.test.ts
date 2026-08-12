@@ -217,6 +217,72 @@ test('coverage API applies exact session filtering and keeps totals balanced', a
   }
 });
 
+test('source detail endpoint returns full native OTel evidence; summary rows stay lightweight', async () => {
+  const runtimeDirectory = path.join(runtimeRoot, randomUUID());
+  const dataDir = path.join(runtimeDirectory, 'data');
+  const nativeOtelDirectory = path.join(runtimeDirectory, 'native-otel');
+  const copilotHome = path.join(runtimeDirectory, 'copilot-home');
+  const sessionId = 'sess-source-detail';
+  await mkdir(nativeOtelDirectory, { recursive: true });
+  await mkdir(path.join(copilotHome, 'session-state', sessionId), { recursive: true });
+
+  await writeFile(
+    path.join(nativeOtelDirectory, 'traces.jsonl'),
+    JSON.stringify({
+      signal: 'trace',
+      observed_at_unix_ms: 1_723_400_000_000,
+      session_id: sessionId,
+      trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
+      span_id: '00f067aa0ba902b7',
+      parent_span_id: 'aabbccddeeff0011',
+      model: 'gpt-5.6-terra',
+      usage: { input_tokens: 12, output_tokens: 34 },
+      attributes: { 'gen_ai.operation.name': 'chat', 'span.name': 'invoke_agent' },
+      resource: { 'service.name': 'copilot', 'service.version': '1.0.79-5' },
+      instrumentation_scope: { name: 'copilot.otel', version: '1.0.0' }
+    }) + '\n',
+    'utf8'
+  );
+
+  const port = 15332;
+  const child = await startBridge(port, dataDir, nativeOtelDirectory, copilotHome);
+  try {
+    const hook = await requestJson(port, 'POST', '/hooks/sessionStart', {
+      sessionId,
+      timestamp: 1_723_400_000_100
+    });
+    assert.equal(hook.status, 200);
+
+    const sourcesPage = await requestJson(port, 'GET', `/api/sessions/${sessionId}/sources?limit=1000`);
+    assert.equal(sourcesPage.status, 200);
+    const items = sourcesPage.body['items'] as Array<Record<string, unknown>>;
+    const nativeRow = items.find((item) => item['source_kind'] === 'native_otel');
+    assert.ok(nativeRow, 'expected a native_otel summary row');
+    assert.equal(nativeRow!['has_evidence'], true);
+    assert.equal('evidence' in nativeRow!, false, 'summary rows must not embed full evidence');
+    assert.equal(JSON.stringify(sourcesPage.body).includes('gen_ai.operation.name'), false);
+
+    const sourceId = nativeRow!['source_id'] as string;
+    const detail = await requestJson(port, 'GET', `/api/sessions/${sessionId}/sources/${encodeURIComponent(sourceId)}`);
+    assert.equal(detail.status, 200);
+    const evidence = detail.body['evidence'] as Record<string, unknown>;
+    assert.ok(evidence);
+    assert.equal(evidence['signal'], 'trace');
+    assert.equal(evidence['model'], 'gpt-5.6-terra');
+    assert.equal((evidence['usage'] as Record<string, unknown>)['output_tokens'], 34);
+    assert.equal((evidence['attributes'] as Record<string, unknown>)['gen_ai.operation.name'], 'chat');
+    assert.equal((evidence['resource'] as Record<string, unknown>)['service.name'], 'copilot');
+    assert.equal((evidence['instrumentation_scope'] as Record<string, unknown>)['name'], 'copilot.otel');
+    assert.equal(evidence['parent_span_id'], 'aabbccddeeff0011');
+
+    const missingSource = await requestJson(port, 'GET', `/api/sessions/${sessionId}/sources/does-not-exist`);
+    assert.equal(missingSource.status, 404);
+  } finally {
+    await stopBridge(child);
+    await rm(runtimeDirectory, { recursive: true, force: true });
+  }
+});
+
 test('projectConversation emits visible gap nodes for non-represented coverage entries', () => {
   const sessionId = 'sess-gap';
   const base = Date.parse('2026-08-10T12:00:00.000Z');
