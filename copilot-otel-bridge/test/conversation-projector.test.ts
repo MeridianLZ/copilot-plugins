@@ -115,9 +115,54 @@ test('native events switch projection to native-first with hook overlay', () => 
   assert.ok(turn);
   const assistantText = JSON.stringify(turn);
   assert.ok(assistantText.includes('Done. The thing is complete.'));
-  // hook-only governance overlay landed inside the turn window
-  assert.ok(turn.children.some((child) => child.event_name === 'errorOccurred'));
-  assert.ok(turn.children.some((child) => child.event_name === 'postToolUseFailure'));
+  // hook-only governance overlay landed inside the turn window, nested under
+  // one governance group so the readable transcript stays uncluttered.
+  const governance = turn.children.find((child) => child.kind === 'governance');
+  assert.ok(governance);
+  assert.ok(governance.children.some((child) => child.event_name === 'errorOccurred'));
+  assert.ok(governance.children.some((child) => child.event_name === 'postToolUseFailure'));
+});
+
+function collectEventNames(node: ReturnType<typeof projectConversation>['root']): string[] {
+  const names: string[] = [];
+  if (node.event_name) names.push(node.event_name);
+  for (const child of node.children) names.push(...collectEventNames(child));
+  return names;
+}
+
+test('all 14 hook events remain present (none hidden) in native-first projection', () => {
+  const nativeLines = [
+    JSON.stringify({ type: 'session.start', data: { copilotVersion: '1.0.79-5' }, id: 'n1', timestamp: new Date(base).toISOString() }),
+    JSON.stringify({ type: 'user.message', data: { content: 'do the thing' }, id: 'n2', timestamp: new Date(base + 1_000).toISOString() }),
+    JSON.stringify({ type: 'assistant.turn_start', data: { turnId: 't-0' }, id: 'n3', timestamp: new Date(base + 1_100).toISOString() }),
+    JSON.stringify({
+      type: 'assistant.message',
+      data: { messageId: 'm-1', model: 'gpt-5.6-terra', turnId: 't-0', content: 'Done. The thing is complete.' },
+      id: 'n4',
+      timestamp: new Date(base + 5_000).toISOString()
+    }),
+    JSON.stringify({ type: 'assistant.turn_end', data: { turnId: 't-0' }, id: 'n5', timestamp: new Date(base + 8_000).toISOString() })
+  ];
+  const doc = projectConversation(envelopes(), 'sess-conv', parseNativeLines(nativeLines));
+  const presentNames = new Set(collectEventNames(doc.root));
+  const expected: CopilotHookEventName[] = [
+    'sessionStart',
+    'userPromptSubmitted',
+    'userPromptTransformed',
+    'preToolUse',
+    'permissionRequest',
+    'postToolUse',
+    'subagentStart',
+    'subagentStop',
+    'postToolUseFailure',
+    'errorOccurred',
+    'agentStop',
+    'notification',
+    'sessionEnd'
+  ];
+  for (const name of expected) {
+    assert.ok(presentNames.has(name), `expected hook event ${name} to remain present, got ${[...presentNames].join(', ')}`);
+  }
 });
 
 test('without native events the hooks-only projection is unchanged in shape', () => {
