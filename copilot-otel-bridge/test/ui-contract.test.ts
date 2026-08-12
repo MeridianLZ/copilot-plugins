@@ -10,7 +10,7 @@ const uiPath = path.join(root, 'ui', 'index.html');
 test('forensic UI provides inspector, source coverage, lineage, and disposition states', async () => {
   const html = await readFile(uiPath, 'utf8');
 
-  for (const id of ['trace-inspector', 'source-coverage', 'mcp-lineage', 'disposition-cards']) {
+  for (const id of ['trace-inspector', 'source-coverage', 'mcp-lineage', 'disposition-cards', 'evidence-detail']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   for (const disposition of ['redacted', 'unavailable', 'invalid', 'unmatched', 'heuristic', 'deduplicated', 'late']) {
@@ -19,6 +19,8 @@ test('forensic UI provides inspector, source coverage, lineage, and disposition 
   assert.match(html, /fetchWithEtag/);
   assert.match(html, /fetchAllSourceRecords/);
   assert.match(html, /fetchAllConversationEvents/);
+  assert.match(html, /showEvidenceDetail/);
+  assert.match(html, /data-source-id/);
   assert.doesNotMatch(html, /session-state[\\/]/);
   assert.doesNotMatch(html, /credential|password/i);
 });
