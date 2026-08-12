@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { correlateSources } from '../src/correlation.js';
 import {
+  buildTelemetryFieldAccounting,
   buildSourceRecords,
   summarizeCoverage,
   type CoverageEntry
@@ -163,4 +164,32 @@ test('summarizeCoverage counts every entry disposition exactly once', () => {
   assert.equal(totals.by_disposition.unmatched, 1);
   assert.equal(totals.by_disposition.heuristic, 1);
   assert.equal(totals.balanced, true);
+});
+
+test('field accounting assigns every supported-lane evidence path a disposition and UI target', () => {
+  const sessionId = 'sess-field-accounting';
+  const entries = correlateSources(buildSourceRecords({
+    sessionId,
+    hooks: [hookEnvelope(sessionId)],
+    nativeEvents: [nativeTranscriptEvent(sessionId)],
+    nativeOtelRecords: [nativeOtelRecord(sessionId)],
+    spans: [evidenceSpan(sessionId)]
+  }));
+  const fields = buildTelemetryFieldAccounting(entries);
+  const allowed = new Set([
+    'rendered',
+    'represented',
+    'redacted',
+    'unavailable',
+    'unmatched',
+    'heuristic',
+    'deduplicated',
+    'invalid',
+    'late_out_of_order'
+  ]);
+  assert.equal(fields.length > 0, true);
+  assert.equal(fields.every((field) => allowed.has(field.disposition)), true);
+  assert.equal(fields.every((field) => field.path.length > 0 && field.ui_target.length > 0), true);
+  assert.equal(fields.some((field) => field.source_kind === 'native_otel' && field.path.startsWith('$.raw_')), true);
+  assert.equal(fields.some((field) => field.source_kind === 'hook' && field.ui_target === 'evidence-detail-attributes'), true);
 });
