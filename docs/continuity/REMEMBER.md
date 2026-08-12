@@ -2,6 +2,33 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-12 — lossless telemetry remediation invariants
+
+- **Invariant:** Every supported telemetry source field must end with one
+  explicit disposition: rendered, represented, redacted, unavailable,
+  unmatched, heuristic, deduplicated, invalid, or late-out-of-order.
+- **Invariant:** Preserve one complete sanitized evidence object. Correlation
+  and conversation projections carry stable references and summaries; they do
+  not copy or reduce source truth.
+- **Invariant:** Exact canonical IDs precede timestamps/FIFO:
+  session, turn, message, tool call, agent, trace/span, hook event, and MCP
+  request. Conflicting exact IDs remain explicit conflicts.
+- **Invariant:** OTLP completeness includes resource and scope containers/schema
+  URLs, span intrinsics, attributes, events, links, status, trace state, flags,
+  and every dropped count. Unknown future fields survive sanitization.
+- **Invariant:** Native transcript remains verbatim/ordering authority; native
+  OTel remains execution/identity/model/usage authority; hooks remain
+  governance/lifecycle authority.
+- **Invariant:** All 14 hook events remain selectable in native-first
+  projection, even when visually grouped to avoid clutter.
+- **Fact:** Official GenAI semantic conventions moved to
+  `open-telemetry/semantic-conventions-genai`; old core registry entries are
+  migration/deprecation markers, not instructions to discard emitted fields.
+- **Fact:** MCP stdio has no header channel. Trace context must be validated
+  from per-request JSON-RPC metadata; stdout must remain protocol-only.
+- **Fact:** `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` remains
+  required for requested local forensic capture and increases privacy risk.
+
 ## 2026-08-10 — MCP propagation checkpoint
 
 - **Fact:** MCP propagation is committed through `24a1b40`; W3C carriers cross

@@ -1,6 +1,24 @@
 # TASKS
 
-## Current checkpoint — 2026-08-10 16:32 MDT
+## Current checkpoint — 2026-08-12 14:15 MDT
+
+- [x] Audit 25 documents / 769 sections and current replication blockers.
+- [x] Research OTel, GenAI, Copilot, MCP, W3C, and trace UI sources.
+- [x] Write annotated bibliography with descriptive active hyperlinks.
+- [x] Copy implementation plan verbatim into repository `docs/`.
+- [x] Refresh all six canonical continuity files.
+- [ ] Create canonical conversation identity and exact-ID joins.
+- [ ] Preserve complete sanitized native trace/metric/log evidence.
+- [ ] Keep evidence through coverage/correlation and project all links/events.
+- [ ] Unify emitted/projected hook contracts and terminal status.
+- [ ] Display all telemetry fields in searchable raw/normalized inspector.
+- [ ] Add MCP stdio trace-context propagation.
+- [ ] Prove 100% source-field accounting.
+- [ ] Run full checks and fresh all-lane live deployment.
+
+The older task sections remain durable history. This checklist is active.
+
+## Prior checkpoint — 2026-08-10 16:32 MDT
 
 - [x] Centralize proxy-aware redaction and local no-proxy runtime.
 - [x] Normalize, sanitize, persist, and expose native OTel traces, metrics,

@@ -2,6 +2,26 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-12 — plan from the lossy seam, not ingestion
+
+- When telemetry arrives but UI lacks detail, compare source type, correlation
+  type, projection type, and API response side by side. Here ingestion already
+  retained rich data; one reducer discarded it before UI.
+- Future-proof telemetry by preserving sanitized raw entities and deriving
+  indexes. Fixed attribute allow-lists age badly when conventions move or add
+  complex values.
+- “Display every attribute” needs a machine-checkable field-accounting test,
+  not a manually curated UI checklist. Walk fixture JSON paths and require a
+  disposition plus a real UI target for represented fields.
+- Keep readable conversation and forensic completeness separate: timeline for
+  human flow, lazy evidence inspector for raw/normalized truth.
+- For a protocol transport without headers, prove framework callback context
+  before writing a custom transport. Define a bounded fallback up front so one
+  SDK uncertainty cannot block deployment.
+- Research docs should include negative searches and unavailable pages. This
+  prevents later workers from treating absence of a search result as proof of
+  unsupported behavior.
+
 ## 2026-08-10 — dependency recovery and vertical progress
 
 - When pnpm optional dependency resolution is the blocker, install only the

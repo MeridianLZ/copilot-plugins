@@ -2,6 +2,20 @@
 
 _Newest first._
 
+## 2026-08-12 — annotated bibliography and verbatim plan documentation
+
+- Created `docs/otel-remediation/README.md`.
+- Created
+  `docs/otel-remediation/2026-08-12-annotated-bibliography.md` with active
+  descriptive hyperlinks, annotations, authority/stability notes, retrieval
+  date, repository evidence, negative searches, and research-to-plan decisions.
+- Verified session plan copied verbatim to
+  `docs/superpowers/plans/2026-08-12-complete-copilot-telemetry-replication-remediation.md`.
+- Source/copy SHA-256:
+  `E440640F0750C03B56277DA2C1C3D8AB2D43EB0B61D9B71AB9B48652DC53D2CD`.
+- Refreshed all six canonical continuity files under `docs/continuity/`.
+- No implementation code changed during this pass.
+
 ## 2026-08-10 — paused before UI integration
 
 - MCP propagation completed: W3C carrier validation/injection/extraction,
