@@ -1,9 +1,15 @@
 import { createHash } from 'node:crypto';
 import { open, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { createRedactionDispositionAccumulator, sanitizeNativeOtelValue } from './security.js';
+import {
+  createRedactionDispositionAccumulator,
+  isOpaqueReasoningKey,
+  sanitizeNativeOtelValue
+} from './security.js';
+import { normalizeConversationIdentity } from './conversation-identity.js';
 import type {
   JsonValue,
+  JsonObject,
   NativeOtelRecord,
   NativeSignal,
   RedactionDisposition
@@ -16,6 +22,10 @@ interface CandidateRecord {
   attributes: Record<string, JsonValue>;
   resource: Record<string, JsonValue>;
   instrumentationScope: Record<string, JsonValue>;
+  resourceContainer: Record<string, unknown> | undefined;
+  scopeContainer: Record<string, unknown> | undefined;
+  resourceSchemaUrl: string | undefined;
+  scopeSchemaUrl: string | undefined;
   observedAtUnixMs: number | undefined;
   traceId: string | undefined;
   spanId: string | undefined;
@@ -364,6 +374,10 @@ function parseTraceCandidates(line: Record<string, unknown>): CandidateRecord[] 
           attributes,
           resource,
           instrumentationScope,
+          resourceContainer: recordField(resourceSpanCandidate, 'resource'),
+          scopeContainer: recordField(scopeSpanCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+          resourceSchemaUrl: stringField(resourceSpanCandidate, 'schemaUrl', 'schema_url'),
+          scopeSchemaUrl: stringField(scopeSpanCandidate, 'schemaUrl', 'schema_url'),
           observedAtUnixMs: extractObservedAtUnixMs(spanCandidate, scopeSpanCandidate, resourceSpanCandidate, line),
           traceId: stringField(spanCandidate, 'traceId', 'trace_id'),
           spanId: stringField(spanCandidate, 'spanId', 'span_id'),
@@ -427,6 +441,10 @@ function parseMetricCandidates(line: Record<string, unknown>): CandidateRecord[]
             attributes,
             resource,
             instrumentationScope,
+            resourceContainer: recordField(resourceMetricCandidate, 'resource'),
+            scopeContainer: recordField(scopeMetricCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+            resourceSchemaUrl: stringField(resourceMetricCandidate, 'schemaUrl', 'schema_url'),
+            scopeSchemaUrl: stringField(scopeMetricCandidate, 'schemaUrl', 'schema_url'),
             observedAtUnixMs: extractObservedAtUnixMs(metricCandidate, scopeMetricCandidate, resourceMetricCandidate, line),
             traceId: undefined,
             spanId: undefined,
@@ -450,6 +468,10 @@ function parseMetricCandidates(line: Record<string, unknown>): CandidateRecord[]
             attributes,
             resource,
             instrumentationScope,
+            resourceContainer: recordField(resourceMetricCandidate, 'resource'),
+            scopeContainer: recordField(scopeMetricCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+            resourceSchemaUrl: stringField(resourceMetricCandidate, 'schemaUrl', 'schema_url'),
+            scopeSchemaUrl: stringField(scopeMetricCandidate, 'schemaUrl', 'schema_url'),
             observedAtUnixMs: extractObservedAtUnixMs(item.point, metricCandidate, scopeMetricCandidate, resourceMetricCandidate, line),
             traceId: undefined,
             spanId: undefined,
@@ -492,6 +514,10 @@ function parseLogCandidates(line: Record<string, unknown>): CandidateRecord[] {
           attributes,
           resource,
           instrumentationScope,
+          resourceContainer: recordField(resourceLogCandidate, 'resource'),
+          scopeContainer: recordField(scopeLogCandidate, 'scope', 'instrumentationScope', 'instrumentation_scope'),
+          resourceSchemaUrl: stringField(resourceLogCandidate, 'schemaUrl', 'schema_url'),
+          scopeSchemaUrl: stringField(scopeLogCandidate, 'schemaUrl', 'schema_url'),
           observedAtUnixMs: extractObservedAtUnixMs(logRecordCandidate, scopeLogCandidate, resourceLogCandidate, line),
           traceId: stringField(logRecordCandidate, 'traceId', 'trace_id'),
           spanId: stringField(logRecordCandidate, 'spanId', 'span_id'),
@@ -518,6 +544,10 @@ function parseDirectCandidate(signal: NativeSignal, line: Record<string, unknown
     attributes,
     resource,
     instrumentationScope,
+    resourceContainer: recordField(line, 'resource'),
+    scopeContainer: recordField(line, 'instrumentationScope', 'instrumentation_scope', 'scope'),
+    resourceSchemaUrl: stringField(line, 'resourceSchemaUrl', 'resource_schema_url'),
+    scopeSchemaUrl: stringField(line, 'scopeSchemaUrl', 'scope_schema_url'),
     observedAtUnixMs: extractObservedAtUnixMs(line),
     traceId: stringField(line, 'traceId', 'trace_id'),
     spanId: stringField(line, 'spanId', 'span_id'),
@@ -533,6 +563,43 @@ function sanitizeRecordMap(
   const sanitized = sanitizeNativeOtelValue(keyPath, input, disposition);
   if (isRecord(sanitized)) return sanitized as Record<string, JsonValue>;
   return {};
+}
+
+function sanitizeRawObject(
+  input: Record<string, unknown> | undefined,
+  keyPath: string,
+  disposition: RedactionDisposition
+): JsonObject | undefined {
+  if (input === undefined) return undefined;
+  const converted = toJsonValue(input);
+  const sanitized = sanitizeNativeOtelValue(keyPath, converted, disposition);
+  return isRecord(sanitized) ? redactOtlpKeyValueArrays(sanitized as JsonObject, disposition) : undefined;
+}
+
+function redactOtlpKeyValueArrays(value: JsonObject, disposition: RedactionDisposition): JsonObject {
+  const output: JsonObject = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (Array.isArray(child)) {
+      output[key] = child.map((entry) => {
+        if (!isRecord(entry)) return entry;
+        const attributeKey = entry['key'];
+        if (typeof attributeKey === 'string' && isOpaqueReasoningKey(attributeKey) && entry['value'] !== undefined) {
+          const redacted = sanitizeNativeOtelValue(
+            attributeKey,
+            '[REDACTED_reasoning_ciphertext]',
+            disposition
+          );
+          return { ...entry, value: redacted };
+        }
+        return isRecord(entry) ? redactOtlpKeyValueArrays(entry, disposition) : entry;
+      });
+      continue;
+    }
+    output[key] = isRecord(child)
+      ? redactOtlpKeyValueArrays(child, disposition)
+      : child;
+  }
+  return output;
 }
 
 function usageKeyFromNormalized(normalized: string): string | undefined {
@@ -676,8 +743,19 @@ function normalizeCandidate(
   const attributes = sanitizeRecordMap(candidate.attributes, 'attributes', disposition);
   const resource = sanitizeRecordMap(candidate.resource, 'resource', disposition);
   const instrumentationScope = sanitizeRecordMap(candidate.instrumentationScope, 'instrumentation_scope', disposition);
+  const rawRecord = sanitizeRawObject(candidate.line, 'raw_record', disposition);
+  const rawEntity = sanitizeRawObject(candidate.entity, 'raw_entity', disposition);
+  const rawResource = sanitizeRawObject(candidate.resourceContainer, 'raw_resource', disposition);
+  const rawScope = sanitizeRawObject(candidate.scopeContainer, 'raw_scope', disposition);
   const lookup = buildLookup(attributes, resource, instrumentationScope, candidate.line, candidate.entity);
   const usage = extractUsage(lookup, candidate.line, candidate.entity);
+  const identity = normalizeConversationIdentity({
+    ...candidate.line,
+    ...candidate.entity,
+    ...attributes,
+    ...resource,
+    ...instrumentationScope
+  });
 
   const sessionId = extractStringFromLookupOrObject(lookup, candidate.entity, candidate.line, [
     'session_id',
@@ -728,6 +806,13 @@ function normalizeCandidate(
     attributes,
     resource,
     instrumentation_scope: instrumentationScope,
+    ...(Object.keys(identity).length > 0 ? { identity } : {}),
+    ...(rawRecord !== undefined ? { raw_record: rawRecord } : {}),
+    ...(rawEntity !== undefined ? { raw_entity: rawEntity } : {}),
+    ...(rawResource !== undefined ? { raw_resource: rawResource } : {}),
+    ...(rawScope !== undefined ? { raw_scope: rawScope } : {}),
+    ...(candidate.resourceSchemaUrl !== undefined ? { raw_resource_schema_url: candidate.resourceSchemaUrl } : {}),
+    ...(candidate.scopeSchemaUrl !== undefined ? { raw_scope_schema_url: candidate.scopeSchemaUrl } : {}),
     content_disposition: disposition,
     validity: 'valid',
     source_hash: sourceHash

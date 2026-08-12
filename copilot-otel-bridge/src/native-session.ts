@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { redactSecrets, truncateUtf8 } from './security.js';
+import { normalizeConversationIdentity } from './conversation-identity.js';
 import type { ConversationContent, ConversationNode } from './conversation-projector.js';
 import type { JsonValue } from './types.js';
 
@@ -27,6 +28,7 @@ export interface NativeEvent {
   id: string;
   timestamp: string;
   agent_id?: string;
+  identity?: import('./conversation-identity.js').ConversationIdentity;
 }
 
 export interface NativeUsage {
@@ -73,12 +75,21 @@ export function parseNativeLines(lines: readonly string[]): NativeEvent[] {
     const record = parsed as Record<string, unknown>;
     if (typeof record['type'] !== 'string' || typeof record['timestamp'] !== 'string') continue;
     const data = record['data'];
+    const dataObject = data !== null && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, JsonValue>)
+      : {};
+    const identity = normalizeConversationIdentity({
+      ...record,
+      ...dataObject,
+      agentId: record['agentId']
+    });
     events.push({
       type: record['type'],
-      data: data !== null && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, JsonValue>) : {},
+      data: dataObject,
       id: typeof record['id'] === 'string' ? record['id'] : '',
       timestamp: record['timestamp'],
-      ...(typeof record['agentId'] === 'string' ? { agent_id: record['agentId'] } : {})
+      ...(typeof record['agentId'] === 'string' ? { agent_id: record['agentId'] } : {}),
+      ...(Object.keys(identity).length > 0 ? { identity } : {})
     });
   }
   return events;
@@ -163,6 +174,7 @@ interface AssembledMessage {
 export function projectNativeConversation(events: readonly NativeEvent[], sessionId: string): NativeProjection {
   const root = makeNode('session', `native-session:${sessionId}`, 'Session', events[0] ? timeMs(events[0]) : 0, 0);
   root.status = 'open';
+  root.identity = { session_id: sessionId };
 
   let model: string | undefined;
   const usage: NativeUsage = {};
@@ -191,6 +203,10 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
       turnCount += 1;
       currentTurn = makeNode('turn', `native-turn:${turnId ?? turnCount}`, 'Turn', ms, 1);
       currentTurn.status = 'open';
+      currentTurn.identity = normalizeConversationIdentity({
+        session_id: sessionId,
+        turn_id: turnId
+      });
       root.children.push(currentTurn);
     }
     return currentTurn;
@@ -199,6 +215,12 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
   const flushMessage = (assembled: AssembledMessage): void => {
     const host = assembled.agent_id !== undefined ? subagentNodes.get(assembled.agent_id) ?? root : currentTurn ?? root;
     const node = makeNode('event', `native-msg:${assembled.message_id}`, 'Assistant', assembled.ms, host.depth + 1);
+    node.identity = normalizeConversationIdentity({
+      session_id: sessionId,
+      message_id: assembled.message_id,
+      turn_id: assembled.turn_id,
+      agent_id: assembled.agent_id
+    });
     if (assembled.model !== undefined) node.model = assembled.model;
     const text = assembled.chunks.sort((a, b) => a.index - b.index).map((chunk) => chunk.content).join('');
     if (text.length > 0) node.content.push({ role: 'agent', label: 'message', text });
@@ -245,6 +267,12 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
         if (event.agent_id === undefined) currentTurn = undefined; // a user message opens a new root turn
         const turn = event.agent_id === undefined ? ensureTurn(ms) : hostFor(event);
         const node = makeNode('event', `native-user:${event.id}`, 'User', ms, turn.depth + 1);
+        node.identity = normalizeConversationIdentity({
+          ...data,
+          session_id: sessionId,
+          event_id: event.id,
+          agent_id: event.agent_id
+        });
         pushText(node, 'user', 'prompt', data['content']);
         turn.children.push(node);
         break;
@@ -322,6 +350,12 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
         const name = str(data['agentDisplayName']) ?? str(data['agentName']) ?? 'subagent';
         const node = makeNode('subagent', `native-subagent:${toolCallId ?? event.id}`, `Subagent ${name}`, ms, host.depth + 1);
         node.status = 'open';
+        node.identity = normalizeConversationIdentity({
+          ...data,
+          session_id: sessionId,
+          event_id: event.id,
+          agent_id: event.agent_id
+        });
         const agentName = str(data['agentName']);
         if (agentName !== undefined) node.agent_name = agentName;
         const subModel = str(data['model']);
@@ -353,6 +387,12 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
         const toolName = str(data['toolName']) ?? 'tool';
         const node = makeNode('tool', `native-tool:${toolCallId}`, `Tool ${toolName}`, ms, host.depth + 1);
         node.status = 'open';
+        node.identity = normalizeConversationIdentity({
+          ...data,
+          session_id: sessionId,
+          event_id: event.id,
+          agent_id: event.agent_id
+        });
         node.tool_name = toolName;
         const args = cleanJson(data['arguments']);
         if (args !== undefined) node.content.push({ role: 'tool', label: 'input', json: args });
@@ -387,6 +427,13 @@ export function projectNativeConversation(events: readonly NativeEvent[], sessio
           ? (request as Record<string, JsonValue>)
           : {};
         const node = makeNode('event', `native-permission:${requestId}`, `Permission · ${str(record['kind']) ?? 'request'}`, ms, host.depth + 1);
+        node.identity = normalizeConversationIdentity({
+          ...data,
+          ...record,
+          session_id: sessionId,
+          event_id: event.id,
+          agent_id: event.agent_id
+        });
         pushText(node, 'system', 'command', record['fullCommandText']);
         pushText(node, 'system', 'intention', record['intention']);
         permissionNodes.set(requestId, node);

@@ -69,6 +69,81 @@ test('parseNativeOtelLines normalizes trace fixture and redacts canary content',
   assert.equal(JSON.stringify(records).includes('AAAA=='), false);
 });
 
+test('parseNativeOtelLines preserves complete sanitized OTLP entity and unknown fields', () => {
+  const input = JSON.stringify({
+    signal: 'trace',
+    resourceSpans: [{
+      resource: {
+        attributes: [{ key: 'copilot.session.id', value: { stringValue: 'session-lossless' } }],
+        droppedAttributesCount: 2,
+        futureResourceField: { keep: 'yes' }
+      },
+      schemaUrl: 'https://opentelemetry.io/schemas/1.38.0',
+      scopeSpans: [{
+        scope: {
+          name: 'copilot.native',
+          version: '1.0.0',
+          attributes: [{ key: 'scope.future', value: { stringValue: 'scope-value' } }],
+          droppedAttributesCount: 1
+        },
+        schemaUrl: 'https://opentelemetry.io/schemas/genai/1.0.0',
+        spans: [{
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+          spanId: '00f067aa0ba902b7',
+          parentSpanId: 'b9c7c989f97918e1',
+          traceState: 'vendor=value',
+          flags: 1,
+          name: 'chat',
+          kind: 1,
+          startTimeUnixNano: '1723298400000000000',
+          endTimeUnixNano: '1723298401000000000',
+          droppedAttributesCount: 3,
+          attributes: [
+            { key: 'gen_ai.request.model', value: { stringValue: 'gpt-5.6-terra' } },
+            { key: 'copilot.turn.id', value: { stringValue: 'turn-trace-1' } },
+            { key: 'copilot.tool.call.id', value: { stringValue: 'tool-trace-1' } }
+          ],
+          events: [{
+            timeUnixNano: '1723298400500000000',
+            name: 'gen_ai.content',
+            droppedAttributesCount: 1,
+            attributes: [{ key: 'future.event', value: { stringValue: 'event-value' } }]
+          }],
+          droppedEventsCount: 2,
+          links: [{
+            traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            spanId: 'bbbbbbbbbbbbbbbb',
+            traceState: 'link=value',
+            flags: 1,
+            droppedAttributesCount: 1,
+            attributes: [{ key: 'future.link', value: { stringValue: 'link-value' } }]
+          }],
+          droppedLinksCount: 4,
+          status: { code: 2, message: 'failed' },
+          futureSpanField: { keep: 'span' }
+        }]
+      }]
+    }]
+  });
+
+  const record = parseNativeOtelLines([input], 'fixtures/lossless.jsonl')[0];
+  assert.ok(record);
+  const rawEntity = JSON.stringify(record.raw_entity);
+  const rawRecord = JSON.stringify(record.raw_record);
+  assert.match(rawEntity, /"futureSpanField":\{"keep":"span"\}/);
+  assert.match(rawEntity, /"droppedLinksCount":4/);
+  assert.match(rawEntity, /"future\.event".*"event-value"/);
+  assert.match(rawEntity, /"future\.link".*"link-value"/);
+  assert.match(rawRecord, /"futureResourceField":\{"keep":"yes"\}/);
+  assert.match(JSON.stringify(record.raw_resource), /"droppedAttributesCount":2/);
+  assert.match(JSON.stringify(record.raw_scope), /"droppedAttributesCount":1/);
+  assert.equal(record.raw_scope_schema_url, 'https://opentelemetry.io/schemas/genai/1.0.0');
+  assert.equal(record.identity?.session_id, 'session-lossless');
+  assert.equal(record.identity?.turn_id, 'turn-trace-1');
+  assert.equal(record.identity?.tool_call_id, 'tool-trace-1');
+  assert.equal(JSON.stringify(record).includes('canary-pass'), false);
+});
+
 test('parseNativeOtelLines normalizes metric and log fixtures', async () => {
   const metricRecords = parseNativeOtelLines(
     await readFixtureLines('native-otel-metrics.jsonl'),

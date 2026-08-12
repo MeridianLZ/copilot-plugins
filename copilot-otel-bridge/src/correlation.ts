@@ -1,4 +1,5 @@
 import { redactSecrets, truncateUtf8 } from './security.js';
+import { normalizeConversationIdentity, type ConversationIdentity } from './conversation-identity.js';
 
 export type SourceKind = 'native_otel' | 'native_transcript' | 'hook' | 'mcp' | 'evidence';
 export type CoverageDisposition =
@@ -21,6 +22,7 @@ export interface SourceRecord {
   turn_id?: string;
   tool_call_id?: string;
   session_id?: string;
+  identity?: ConversationIdentity;
   /**
    * Full sanitized evidence carried alongside identity fields so
    * correlation never has to reduce native OTel signal/model/usage/
@@ -33,7 +35,7 @@ export interface SourceRecord {
 export interface CoverageEntry extends SourceRecord {
   disposition: CoverageDisposition;
   canonical_id?: string;
-  matched_by?: 'trace_id' | 'span_id' | 'turn_id' | 'tool_call_id' | 'session_id' | 'fifo_timestamp';
+  matched_by?: 'trace_id' | 'span_id' | 'trace_span' | 'message_id' | 'agent_id' | 'hook_event_id' | 'mcp_request_id' | 'turn_id' | 'tool_call_id' | 'session_id' | 'fifo_timestamp';
   related_ids: string[];
   reason: string;
 }
@@ -46,13 +48,18 @@ const SOURCE_PRIORITY_RANK: Readonly<Record<SourceKind, number>> = {
   mcp: 3,
   evidence: 4
 };
-type ExactMatchKey = 'trace_id' | 'span_id' | 'tool_call_id' | 'turn_id' | 'session_id';
+type ExactMatchKey = 'message_id' | 'tool_call_id' | 'turn_id' | 'agent_id' | 'trace_span' | 'trace_id' | 'span_id' | 'hook_event_id' | 'mcp_request_id' | 'session_id';
 
 const MATCH_PRIORITY: readonly ExactMatchKey[] = [
-  'trace_id',
-  'span_id',
+  'message_id',
   'tool_call_id',
   'turn_id',
+  'agent_id',
+  'trace_span',
+  'trace_id',
+  'span_id',
+  'hook_event_id',
+  'mcp_request_id',
   'session_id'
 ];
 const FIFO_WINDOW_MS = 2_000;
@@ -98,12 +105,36 @@ function normalizeRecord(input: SourceRecord, index: number): SourceRecord {
   if (toolCallId !== undefined) normalized.tool_call_id = toolCallId;
   const sessionId = sanitizeOptionalId(input.session_id);
   if (sessionId !== undefined) normalized.session_id = sessionId;
+  const identity = normalizeConversationIdentity({
+    ...(input.identity ?? {}),
+    session_id: sessionId,
+    ...(turnId !== undefined ? { turn_id: turnId } : {}),
+    ...(toolCallId !== undefined ? { tool_call_id: toolCallId } : {}),
+    ...(traceId !== undefined ? { trace_id: traceId } : {}),
+    ...(spanId !== undefined ? { span_id: spanId } : {})
+  });
+  if (Object.keys(identity).length > 0) normalized.identity = identity;
   // Evidence arrives already sanitized (redaction happens at the native-otel
   // / native-session parse boundary); pass it through untouched so
   // correlation never has to reduce signal/model/usage/attributes/resource/
   // scope metadata before it reaches coverage/UI.
   if (input.evidence !== undefined) normalized.evidence = input.evidence;
   return normalized;
+}
+
+function identityValue(record: SourceRecord, key: ExactMatchKey): string | undefined {
+  const identity = record.identity;
+  if (!identity) return undefined;
+  switch (key) {
+    case 'trace_span':
+      return identity.trace_id !== undefined && identity.span_id !== undefined
+        ? `${identity.trace_id}:${identity.span_id}`
+        : undefined;
+    case 'session_id':
+      return identity.session_id ?? record.session_id;
+    default:
+      return identity[key];
+  }
 }
 
 function canonicalRefOf(record: Pick<SourceRecord, 'source_kind' | 'source_id'>): string {
@@ -146,11 +177,11 @@ function findExactMatch(record: SourceRecord, active: readonly IndexedEntry[]): 
   matched_by: ExactMatchKey;
 } | undefined {
   for (const key of MATCH_PRIORITY) {
-    const value = record[key];
+    const value = identityValue(record, key);
     if (value === undefined) continue;
     const candidates = active.filter((entry) => {
       if (entry.source_kind === record.source_kind) return false;
-      if (entry[key] !== value) return false;
+      if (identityValue(entry, key) !== value) return false;
       if (key === 'session_id') {
         return Math.abs(entry.timestamp_ms - record.timestamp_ms) <= FIFO_WINDOW_MS;
       }
@@ -214,6 +245,7 @@ function finalizeEntry(entry: IndexedEntry): CoverageEntry {
   if (entry.turn_id) finalized.turn_id = sanitizeText(entry.turn_id, MAX_ID_BYTES);
   if (entry.tool_call_id) finalized.tool_call_id = sanitizeText(entry.tool_call_id, MAX_ID_BYTES);
   if (entry.session_id) finalized.session_id = sanitizeText(entry.session_id, MAX_ID_BYTES);
+  if (entry.identity !== undefined) finalized.identity = entry.identity;
   if (canonicalId) finalized.canonical_id = canonicalId;
   if (entry.matched_by) finalized.matched_by = entry.matched_by;
   if (entry.evidence !== undefined) finalized.evidence = entry.evidence;

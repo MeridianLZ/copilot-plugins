@@ -32,6 +32,33 @@ test('correlateSources prioritizes exact trace/tool/turn/session matches', () =>
   assert.equal(byId.get('hook-trace')?.disposition, 'represented');
 });
 
+test('correlateSources prioritizes canonical message and tool identities before timestamp heuristics', () => {
+  const entries = correlateSources([
+    record('native_transcript', 'message-1', 10_000, {
+      session_id: 's-identity',
+      identity: { session_id: 's-identity', message_id: 'message-1', turn_id: 'turn-1' }
+    }),
+    record('native_otel', 'otel-message-1', 15_000, {
+      session_id: 's-identity',
+      identity: { session_id: 's-identity', message_id: 'message-1', trace_id: 'trace-1', span_id: 'span-1' }
+    }),
+    record('hook', 'tool-1', 20_000, {
+      session_id: 's-identity',
+      identity: { session_id: 's-identity', tool_call_id: 'tool-call-1' }
+    }),
+    record('native_otel', 'otel-tool-1', 25_000, {
+      session_id: 's-identity',
+      identity: { session_id: 's-identity', tool_call_id: 'tool-call-1', trace_id: 'trace-2', span_id: 'span-2' }
+    })
+  ]);
+
+  const byId = new Map(entries.map((entry) => [entry.source_id, entry]));
+  assert.equal(byId.get('otel-message-1')?.matched_by, 'message_id');
+  assert.equal(byId.get('otel-message-1')?.disposition, 'represented');
+  assert.equal(byId.get('otel-tool-1')?.matched_by, 'tool_call_id');
+  assert.equal(byId.get('otel-tool-1')?.disposition, 'represented');
+});
+
 test('correlateSources ignores parentId-like fields', () => {
   const records = [
     {

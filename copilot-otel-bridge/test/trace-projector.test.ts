@@ -103,6 +103,31 @@ test('projectSessionTrace reconstructs lifecycle spans with correct pairing', ()
   assert.equal(subagent.end_unix_ms, base + 6_000);
 });
 
+test('projected spans retain hook attributes, exception events, and trace links', () => {
+  const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+  const start = JSON.parse(line('sessionStart', base, {
+    error_context: 'startup',
+    recoverable: false
+  }));
+  const error = JSON.parse(line('errorOccurred', base + 10, {
+    error_type: 'SyntheticError',
+    error: 'failure'
+  }));
+  start.traceparent = traceparent;
+  error.traceparent = traceparent;
+  const projected = projectSessionTrace([start, error], 'sess-1');
+
+  const session = projected.spans.find((span) => span.kind === 'session');
+  const point = projected.spans.find((span) => span.event === 'errorOccurred');
+  assert.ok(session);
+  assert.ok(point);
+  assert.equal(session.attributes?.['github.copilot.error.context'], 'startup');
+  assert.equal(session.attributes?.['github.copilot.error.recoverable'], false);
+  assert.equal(session.links?.[0]?.trace_id, '4bf92f3577b34da6a3ce929d0e0e4736');
+  assert.equal(point.events?.[0]?.name, 'exception');
+  assert.equal(point.events?.[0]?.attributes?.['exception.type'], 'SyntheticError');
+});
+
 test('a fully doubled ledger projects single spans and no recovered ghosts', () => {
   // Two hook installs: every line re-emitted with a fresh event_id.
   const doubled = ledger.flatMap((entry) => {

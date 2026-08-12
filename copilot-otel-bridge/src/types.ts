@@ -55,6 +55,18 @@ export interface NativeOtelRecord {
   attributes: Record<string, JsonValue>;
   resource: Record<string, JsonValue>;
   instrumentation_scope: Record<string, JsonValue>;
+  /** Canonical IDs derived from native entity/resource attributes. */
+  identity?: import('./conversation-identity.js').ConversationIdentity;
+  /** Full sanitized source line/container, including unknown future fields. */
+  raw_record?: JsonObject;
+  /** Full sanitized signal entity (span, metric point, or log record). */
+  raw_entity?: JsonObject;
+  /** Full sanitized OTLP resource container. */
+  raw_resource?: JsonObject;
+  /** Full sanitized OTLP scope container. */
+  raw_scope?: JsonObject;
+  raw_resource_schema_url?: string;
+  raw_scope_schema_url?: string;
   content_disposition: RedactionDisposition;
   validity: 'valid' | 'invalid';
   source_hash: string;

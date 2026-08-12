@@ -1,4 +1,6 @@
 import { parseTraceparent } from './otel.js';
+import { normalizeConversationIdentity } from './conversation-identity.js';
+import { hookSpanAttributes, hookSpanEvents, hookSpanLinks } from './hook-span-contract.js';
 import { redactSecrets, truncateUtf8 } from './security.js';
 import { eventTimeMs, type ProjectedSpan } from './trace-projector.js';
 import { getString, type HookEnvelope, type NativeOtelRecord } from './types.js';
@@ -32,6 +34,56 @@ export interface CoverageTotals {
   by_disposition: Record<CoverageDisposition, number>;
   total: number;
   balanced: boolean;
+}
+
+export interface TelemetryFieldAccounting {
+  source_id: string;
+  source_kind: SourceKind;
+  path: string;
+  disposition: CoverageDisposition;
+  ui_target: string;
+}
+
+function accountingPaths(value: unknown, prefix = '$'): string[] {
+  if (value === null || typeof value !== 'object') return [prefix];
+  if (Array.isArray(value)) {
+    if (value.length === 0) return [prefix];
+    return value.flatMap((entry, index) => accountingPaths(entry, `${prefix}[${index}]`));
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return [prefix];
+  return entries.flatMap(([key, child]) => accountingPaths(child, `${prefix}.${key}`));
+}
+
+export function buildTelemetryFieldAccounting(
+  entries: readonly CoverageEntry[]
+): TelemetryFieldAccounting[] {
+  const rows: TelemetryFieldAccounting[] = [];
+  for (const entry of entries) {
+    if (entry.evidence === undefined) {
+      rows.push({
+        source_id: entry.source_id,
+        source_kind: entry.source_kind,
+        path: '$',
+        disposition: 'unavailable',
+        ui_target: 'source-coverage'
+      });
+      continue;
+    }
+    for (const path of accountingPaths(entry.evidence)) {
+      const section = path.split('.')[1] ?? 'raw';
+      rows.push({
+        source_id: entry.source_id,
+        source_kind: entry.source_kind,
+        path,
+        disposition: entry.disposition,
+        ui_target: section === 'raw_entity' || section === 'raw_record'
+          ? 'evidence-detail-raw'
+          : `evidence-detail-${section}`
+      });
+    }
+  }
+  return rows;
 }
 
 export interface BuildSourceRecordsInput {
@@ -85,7 +137,12 @@ function buildHookRecords(sessionId: string, hooks: readonly HookEnvelope[]): So
       source_kind: 'hook',
       source_id,
       timestamp_ms: eventTimeMs(hook),
-      session_id: safeSession
+      session_id: safeSession,
+      identity: normalizeConversationIdentity({
+        ...hook.payload,
+        session_id: safeSession,
+        event_id: source_id
+      })
     };
     if (spanContext) {
       record.trace_id = spanContext.traceId;
@@ -95,6 +152,16 @@ function buildHookRecords(sessionId: string, hooks: readonly HookEnvelope[]): So
     if (turnId !== undefined) record.turn_id = turnId;
     const toolCallId = sanitizeOptionalId(getString(hook.payload, 'tool_call_id'));
     if (toolCallId !== undefined) record.tool_call_id = toolCallId;
+    record.evidence = {
+      lane: 'hook_event',
+      event_id: hook.event_id,
+      traceparent: hook.traceparent,
+      tracestate: hook.tracestate,
+      attributes: hookSpanAttributes(hook),
+      events: hookSpanEvents(hook),
+      links: hookSpanLinks(hook),
+      payload: hook.payload
+    };
     records.push(record);
   }
   return records;
@@ -114,12 +181,27 @@ function buildMcpRecords(sessionId: string, hooks: readonly HookEnvelope[]): Sou
       timestamp_ms: eventTimeMs(hook),
       trace_id: spanContext.traceId,
       span_id: spanContext.spanId,
-      session_id: sanitizeOptionalId(sessionId) ?? sessionId
+      session_id: sanitizeOptionalId(sessionId) ?? sessionId,
+      identity: normalizeConversationIdentity({
+        ...hook.payload,
+        session_id: sessionId,
+        event_id: eventId,
+        trace_id: spanContext.traceId,
+        span_id: spanContext.spanId,
+        request_id: getString(hook.payload, 'request_id') ?? getString(hook.payload, 'requestId')
+      })
     };
     const turnId = sanitizeOptionalId(getString(hook.payload, 'turn_id'));
     if (turnId !== undefined) record.turn_id = turnId;
     const toolCallId = sanitizeOptionalId(getString(hook.payload, 'tool_call_id'));
     if (toolCallId !== undefined) record.tool_call_id = toolCallId;
+    record.evidence = {
+      lane: 'mcp_peer',
+      event_id: hook.event_id,
+      traceparent: hook.traceparent,
+      tracestate: hook.tracestate,
+      payload: hook.payload
+    };
     records.push(record);
   }
   return records;
@@ -136,7 +218,13 @@ function buildNativeTranscriptRecords(sessionId: string, nativeEvents: readonly 
       source_kind: 'native_transcript',
       source_id,
       timestamp_ms: parseTimestamp(event.timestamp),
-      session_id: safeSession
+      session_id: safeSession,
+      identity: event.identity ?? normalizeConversationIdentity({
+        ...data,
+        session_id: safeSession,
+        event_id: source_id,
+        agent_id: event.agent_id
+      })
     };
     const traceId = getStringFromRecord(data, ['traceId', 'trace_id']);
     if (traceId !== undefined) record.trace_id = traceId;
@@ -146,6 +234,15 @@ function buildNativeTranscriptRecords(sessionId: string, nativeEvents: readonly 
     if (turnId !== undefined) record.turn_id = turnId;
     const toolCallId = getStringFromRecord(data, ['toolCallId', 'tool_call_id']);
     if (toolCallId !== undefined) record.tool_call_id = toolCallId;
+    record.evidence = {
+      lane: 'native_transcript',
+      type: event.type,
+      event_id: event.id,
+      timestamp: event.timestamp,
+      agent_id: event.agent_id,
+      identity: event.identity,
+      data
+    };
     records.push(record);
   }
   return records;
@@ -162,7 +259,8 @@ function buildNativeOtelRecords(sessionId: string, nativeOtelRecords: readonly N
       source_kind: 'native_otel',
       source_id,
       timestamp_ms: Number.isFinite(record.observed_at_unix_ms) ? Math.trunc(record.observed_at_unix_ms) : Number.NaN,
-      session_id: safeSession
+      session_id: safeSession,
+      ...(record.identity !== undefined ? { identity: record.identity } : {})
     };
     const traceId = sanitizeOptionalId(record.trace_id);
     if (traceId !== undefined) output.trace_id = traceId;
@@ -184,6 +282,13 @@ function buildNativeOtelRecords(sessionId: string, nativeOtelRecords: readonly N
       attributes: record.attributes,
       resource: record.resource,
       instrumentation_scope: record.instrumentation_scope,
+      identity: record.identity,
+      raw_record: record.raw_record,
+      raw_entity: record.raw_entity,
+      raw_resource: record.raw_resource,
+      raw_scope: record.raw_scope,
+      raw_resource_schema_url: record.raw_resource_schema_url,
+      raw_scope_schema_url: record.raw_scope_schema_url,
       content_disposition: record.content_disposition,
       validity: record.validity,
       source_file: record.source_file,
@@ -207,7 +312,27 @@ function buildEvidenceRecords(sessionId: string, spans: readonly ProjectedSpan[]
       source_id,
       timestamp_ms: span.start_unix_ms,
       span_id: source_id,
-      session_id: safeSession
+      session_id: safeSession,
+      ...(span.identity !== undefined ? { identity: span.identity } : {}),
+      evidence: {
+        lane: 'hook_span',
+        span_id: span.span_id,
+        kind: span.kind,
+        name: span.name,
+        event: span.event,
+        parent_id: span.parent_id,
+        start_unix_ms: span.start_unix_ms,
+        end_unix_ms: span.end_unix_ms,
+        status: span.status,
+        status_message: span.status_message,
+        heuristic: span.heuristic,
+        tool_name: span.tool_name,
+        agent_name: span.agent_name,
+        identity: span.identity,
+        attributes: span.attributes,
+        events: span.events,
+        links: span.links
+      }
     });
   }
   return records;
