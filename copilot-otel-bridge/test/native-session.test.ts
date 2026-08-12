@@ -130,7 +130,9 @@ test('permissions join by requestId; model and usage surface on the projection',
 });
 
 test('resolveSessionStatePath confines session ids to the session-state dir', () => {
-  const resolved = resolveSessionStatePath('..\\..\\evil', 'C:/home/.copilot');
+  const resolved = resolveSessionStatePath('safe-session', 'C:/home/.copilot');
   assert.equal(resolved.includes('..'), false);
   assert.ok(resolved.endsWith('events.jsonl'));
+  assert.throws(() => resolveSessionStatePath('..', 'C:/home/.copilot'), /invalid session id/);
+  assert.throws(() => resolveSessionStatePath('..\\..\\evil', 'C:/home/.copilot'), /invalid session id/);
 });

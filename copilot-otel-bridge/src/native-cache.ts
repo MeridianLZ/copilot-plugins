@@ -19,6 +19,7 @@ const IDLE_EVICT_MS = 10 * 60 * 1000;
 
 export class NativeSessionCache {
   readonly #entries = new Map<string, CacheEntry>();
+  readonly #pending = new Map<string, Promise<NativeEvent[]>>();
   readonly #copilotHome: string | undefined;
 
   constructor(copilotHome?: string) {
@@ -26,6 +27,18 @@ export class NativeSessionCache {
   }
 
   async getNativeEvents(sessionId: string): Promise<NativeEvent[]> {
+    const active = this.#pending.get(sessionId);
+    if (active) return active;
+    const pending = this.#readNativeEvents(sessionId);
+    this.#pending.set(sessionId, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.#pending.get(sessionId) === pending) this.#pending.delete(sessionId);
+    }
+  }
+
+  async #readNativeEvents(sessionId: string): Promise<NativeEvent[]> {
     const now = Date.now();
     for (const [key, entry] of this.#entries) {
       if (now - entry.lastAccessMs > IDLE_EVICT_MS) this.#entries.delete(key);
@@ -51,12 +64,17 @@ export class NativeSessionCache {
         try {
           const length = info.size - entry.byteOffset;
           const buffer = Buffer.alloc(length);
-          await handle.read(buffer, 0, length, entry.byteOffset);
-          entry.byteOffset += length;
-          const chunk = entry.remainder + buffer.toString('utf8');
+          const { bytesRead } = await handle.read(buffer, 0, length, entry.byteOffset);
+          entry.byteOffset += bytesRead;
+          const chunk = entry.remainder + buffer.subarray(0, bytesRead).toString('utf8');
           const lines = chunk.split('\n');
           entry.remainder = lines.pop() ?? '';
           entry.events.push(...parseNativeLines(lines));
+          const finalRecord = parseNativeLines([entry.remainder]);
+          if (finalRecord.length > 0) {
+            entry.events.push(...finalRecord);
+            entry.remainder = '';
+          }
         } finally {
           await handle.close();
         }

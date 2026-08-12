@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { BridgeConfig } from '../src/config.js';
-import { createEnvelope } from '../src/envelope.js';
+import { createEnvelope, sanitizeEnvelope } from '../src/envelope.js';
 import { normalizeHookPayload } from '../src/normalize.js';
 import {
   COPILOT_HOOK_EVENTS,
@@ -109,4 +109,19 @@ test('errorOccurred promotes error type before error content is hashed', () => {
   assert.equal(envelope.payload['error_type'], 'RateLimitError');
   assert.ok(isJsonObject(envelope.payload['error']));
   assert.equal(JSON.stringify(envelope).includes('contains sensitive details'), false);
+});
+
+test('sanitizeEnvelope applies content policy to direct envelope payloads', () => {
+  const direct = createEnvelope(
+    { sessionId: 'session-1', timestamp: 1_800_000_000_000 },
+    config,
+    'http-hook',
+    'userPromptSubmitted'
+  );
+  direct.payload['prompt'] = 'sensitive direct payload';
+
+  const sanitized = sanitizeEnvelope(direct, config);
+
+  assert.equal(JSON.stringify(sanitized).includes('sensitive direct payload'), false);
+  assert.ok(isJsonObject(sanitized.payload['prompt']));
 });

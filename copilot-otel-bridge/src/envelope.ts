@@ -30,3 +30,11 @@ export function createEnvelope(
     payload: sanitized as NormalizedHookPayload
   };
 }
+
+export function sanitizeEnvelope(envelope: HookEnvelope, config: BridgeConfig): HookEnvelope {
+  const sanitized = sanitizeJson(envelope.payload, config.contentMode, config.contentMaxBytes);
+  if (!isNormalizedHookPayload(sanitized)) {
+    throw new Error('Sanitization unexpectedly removed required Copilot hook fields');
+  }
+  return { ...envelope, payload: sanitized };
+}

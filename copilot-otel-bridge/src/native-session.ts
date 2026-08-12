@@ -49,9 +49,13 @@ export interface NativeProjection {
 
 export function resolveSessionStatePath(sessionId: string, copilotHome?: string): string {
   const home = copilotHome ?? process.env['COPILOT_HOME'] ?? path.join(homedir(), '.copilot');
-  // session_id arrives from external payloads; keep it from escaping the dir.
-  const safe = path.basename(sessionId);
-  return path.join(home, 'session-state', safe, 'events.jsonl');
+  if (sessionId.length === 0 || sessionId === '.' || sessionId === '..' || /[\\/]/.test(sessionId)) {
+    throw new Error('invalid session id');
+  }
+  const sessionRoot = path.resolve(home, 'session-state');
+  const resolved = path.resolve(sessionRoot, sessionId, 'events.jsonl');
+  if (!resolved.startsWith(`${sessionRoot}${path.sep}`)) throw new Error('invalid session id');
+  return resolved;
 }
 
 export function parseNativeLines(lines: readonly string[]): NativeEvent[] {
