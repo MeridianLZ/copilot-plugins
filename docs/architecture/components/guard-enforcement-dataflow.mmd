@@ -1,0 +1,60 @@
+%% Data flow — guard-enforcement
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload) describing the concrete output payload, then the edge
+%% continues to the next stage: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: tool-call JSON on stdin<br/>.tool_input (Claude/Codex) or .toolArgs (Copilot, may be a JSON-encoded string)"/]
+    ALT[/"alt input: --file PATH / --content TEXT<br/>pre-commit and CI"/]
+
+    ARGS["arg parser (--dialect / --file / --content)<br/>shared/guards/guard-core.sh:16"]
+    ARGS_out[/"DIALECT=claude#124;codex#124;copilot#124;plain<br/>MODE=stdin#124;file#124;literal"/]
+
+    NORM["jq normalizer<br/>shared/guards/guard-core.sh:31"]
+    NORM_out[/"{content, file, cmd}<br/>3 shell vars: CONTENT, FILE, CMD"/]
+
+    NOJQ["jq-missing fail-closed branch<br/>shared/guards/guard-core.sh:42"]
+    NOJQ_out[/"stderr: 'jq not found — enforcement cannot run'<br/>exit 3 (never a silent pass)"/]
+
+    subgraph rules ["rule engine (first match wins)"]
+        direction LR
+        CONTENTC["content rules — Luhn PAN :78, SSN :93, float money :95,<br/>Database.Migrate() :97, SB key :99, secret :101, storage :103,<br/>dangerouslySetInnerHTML :105, rbd :107, VITE_* :109<br/>shared/guards/guard-core.sh:77"]
+        CONTENTC_out[/"REASON string (first violating content rule)<br/>or fallthrough, no output"/]
+        CMDC["command rules — kubectl :115, helm :117, ef update :119,<br/>destructive SQL :121, ledger UPDATE#47;DELETE :123, rm -rf :125,<br/>force push :127, cred read :129, k8s secret :131, curl exfil :133<br/>shared/guards/guard-core.sh:114"]
+        CMDC_out[/"REASON string (first violating command rule)<br/>or fallthrough, no output"/]
+    end
+
+    DENY["deny() then emit_deny() dialect switch<br/>shared/guards/guard-core.sh:50"]
+    DENY_out_claude[/"claude: {hookSpecificOutput:{hookEventName:PreToolUse,<br/>permissionDecision:deny, permissionDecisionReason}} — exit 0"/]
+    DENY_out_codex[/"codex: {permissionDecision:deny, block:true, hookSpecificOutput:{...}} — exit 2"/]
+    DENY_out_copilot[/"copilot: {permissionDecision:deny, permissionDecisionReason} — exit 2"/]
+    DENY_out_plain[/"plain: stderr 'BLOCKED: reason' — exit 1"/]
+
+    ALLOW["fallthrough allow<br/>shared/guards/guard-core.sh:137"]
+    ALLOW_out[/"no stdout, exit 0<br/>host proceeds with the tool call"/]
+
+    PS["Windows parity guard (PowerShell)<br/>targets/copilot/.github/hooks/scripts/guard-core.ps1:7"]
+    PS_out[/"deny {permissionDecision:deny,...} exit 2<br/>or allow {permissionDecision:allow} exit 0 (:64)"/]
+
+    HOSTCLAUDE[["Claude Code PreToolUse (plugins/*/hooks/hooks.json)"]]
+    HOSTCI[["pre-commit / CI (--dialect plain)"]]
+    HOSTWIN[["Copilot CLI on Windows"]]
+
+    IN --> ARGS
+    ALT --> ARGS
+    ARGS --> ARGS_out --> NORM
+    NORM --> NORM_out --> CONTENTC
+    NORM --> NOJQ --> NOJQ_out --> HOSTCI
+    CONTENTC --> CONTENTC_out --> CMDC
+    CMDC --> CMDC_out --> DENY
+    CMDC_out --> ALLOW
+    DENY --> DENY_out_claude --> HOSTCLAUDE
+    DENY --> DENY_out_codex
+    DENY --> DENY_out_copilot
+    DENY --> DENY_out_plain --> HOSTCI
+    ALLOW --> ALLOW_out --> HOSTCLAUDE
+    IN --> PS --> PS_out --> HOSTWIN
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class ARGS,NORM,NOJQ,CONTENTC,CMDC,DENY,ALLOW,PS comp
+    class IN,ALT,ARGS_out,NORM_out,NOJQ_out,CONTENTC_out,CMDC_out,DENY_out_claude,DENY_out_codex,DENY_out_copilot,DENY_out_plain,ALLOW_out,PS_out payload

@@ -1,0 +1,57 @@
+%% Data flow — copilot-plugin (copilot-home)
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload), then the edge continues to the next stage.
+flowchart LR
+    IN[/"copilot-cli session start<br/>plugin root on the plugin search path"/]
+
+    subgraph discovery ["discovery"]
+        direction LR
+        MANIFEST["plugin.json manifest<br/>copilot-plugin/plugin.json:17"]
+        MANIFEST_out[/"discovery paths<br/>agents#47; skills#47; commands#47; hooks#47;copilot-hooks.json"/]
+        AGENTS["7 role agents<br/>copilot-plugin/agents/primary-orchestrator/primary-orchestrator.agent.md:1"]
+        AGENTS_out[/"agent registry<br/>mission + specialized_role + system-prompt per agent"/]
+        SKILLS["22 skills + slash evokers<br/>copilot-plugin/skills/blackboard-sync/SKILL.md:1"]
+        SKILLS_out[/"skill#47;command registry<br/>one commands#47;#lt;name#gt;.toml per SKILL.md"/]
+        MCPREG["mcpServers registration<br/>copilot-plugin/plugin.json:21"]
+        MCPREG_out[/"copilot-mcp tool surface<br/>ask_chewy #124; ask_buzz #124; ask_goose"/]
+    end
+
+    HOOKS["hook wiring<br/>copilot-plugin/hooks/copilot-hooks.json:3"]
+    HOOKS_out[/"5 command handlers<br/>sessionStart, preToolUse, postToolUse, errorOccurred, sessionEnd"/]
+
+    INIT["session-blackboard-init.sh<br/>copilot-plugin/hooks/scripts/session-blackboard-init.sh:20"]
+    INIT_out[/"first blackboard record (event: plan)<br/>+ injected context carrying the session trace_id"/]
+
+    CALL[/"tool invocation<br/>{toolName, toolArgs #124; tool_input, sessionId}"/]
+
+    GUARD["preflight-guard.sh<br/>copilot-plugin/hooks/scripts/preflight-guard.sh:20"]
+    GUARD_out_err[/"deny verdict on stdout<br/>{permissionDecision:#quot;deny#quot;, permissionDecisionReason}, exit 0"/]
+    GUARD_out_ok[/"allow: no stdout verdict<br/>tool proceeds to the CLI executor"/]
+
+    EXEC[["copilot-cli tool executor"]]
+
+    APPEND["blackboard-append-tool.sh<br/>copilot-plugin/hooks/scripts/blackboard-append-tool.sh:23"]
+    APPEND_out[/"compact tool payload + event tag<br/>event=tool, or error via --event error"/]
+
+    BB["bb_append() + bb_trace_id()<br/>copilot-plugin/hooks/scripts/bb-lib.sh:33"]
+    BB_out[/"agent_blackboard#47;#lt;session#gt;.jsonl line<br/>{ts, blackboard_id, session_id, agent_id, role, event, payload, trace.traceparent}"/]
+
+    CLOSE["session-blackboard-close.sh<br/>copilot-plugin/hooks/scripts/session-blackboard-close.sh:18"]
+    CLOSE_out[/"final record (event: decision)<br/>session summary appended to the same JSONL"/]
+
+    OUT[["shared session memory<br/>consumed by blackboard-sync skill + copilot-otel-bridge"]]
+
+    IN --> MANIFEST --> MANIFEST_out --> AGENTS --> AGENTS_out --> SKILLS
+    SKILLS --> SKILLS_out --> MCPREG --> MCPREG_out --> HOOKS
+    HOOKS --> HOOKS_out --> INIT --> INIT_out --> CALL
+    CALL --> GUARD
+    GUARD --> GUARD_out_err --> OUT
+    GUARD --> GUARD_out_ok --> EXEC --> APPEND
+    APPEND --> APPEND_out --> BB --> BB_out --> OUT
+    CLOSE --> CLOSE_out --> OUT
+    BB_out --> CLOSE
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class MANIFEST,AGENTS,SKILLS,MCPREG,HOOKS,INIT,GUARD,APPEND,BB,CLOSE comp
+    class IN,CALL,MANIFEST_out,AGENTS_out,SKILLS_out,MCPREG_out,HOOKS_out,INIT_out,GUARD_out_err,GUARD_out_ok,APPEND_out,BB_out,CLOSE_out payload

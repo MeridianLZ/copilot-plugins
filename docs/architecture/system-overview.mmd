@@ -1,0 +1,60 @@
+%% System overview — fintech-marketplace
+%% Edges = real dependencies (build fan-out, hook wiring, manifest references).
+flowchart TD
+    subgraph plugin_marketplace["plugin-marketplace<br/>(manifest + plugin resolution)"]
+        MKT["marketplace.json<br/>.claude-plugin/marketplace.json:4"]
+    end
+
+    subgraph fintech_plugins["fintech-plugins<br/>(canonical Claude Code plugins)"]
+        FE["fintech-frontend<br/>plugins/fintech-frontend/"]
+        BE["fintech-backend<br/>plugins/fintech-backend/"]
+    end
+
+    subgraph guard_enforcement["guard-enforcement<br/>(portable rule engine)"]
+        GC["guard-core.sh<br/>shared/guards/guard-core.sh:52 emit_deny"]
+        GPS["guard-core.ps1 (Windows parity)<br/>targets/copilot/.github/hooks/scripts/"]
+    end
+
+    subgraph build_pipeline["build-pipeline<br/>(generate + validate targets)"]
+        BLD["build.sh<br/>build/build.sh:15 strip_fm_keys · :72 jq gate · :74 bash -n gate"]
+    end
+
+    subgraph target_ports["target-ports<br/>(generated, never hand-edited)"]
+        CDX["targets/codex/"]
+        CUR["targets/cursor/"]
+        COP["targets/copilot/"]
+    end
+
+    subgraph copilot_plugin["copilot-plugin<br/>(copilot-cli plugin package)"]
+        CPL["copilot-plugin/plugin.json"]
+    end
+
+    subgraph copilot_otel_bridge["copilot-otel-bridge<br/>(hook events → OTEL)"]
+        OTB["isHookEnvelope<br/>copilot-otel-bridge/src/types.ts"]
+    end
+
+    subgraph copilot_mcp["copilot-mcp<br/>(MCP wrapper of Copilot CLI)"]
+        CMB["copilot-bridge<br/>copilot-mcp/src/bridge/copilot-bridge.ts"]
+    end
+
+    subgraph agent_fannypack["agent-fannypack<br/>(agent liveness MCP toolkit)"]
+        AFP["ping / marco / blast-timer<br/>agent-fannypack/mcp/src/"]
+    end
+
+    MKT -- "plugin refs (path)" --> FE
+    MKT -- "plugin refs (path)" --> BE
+    FE -- "hooks invoke guards (JSON stdin)" --> GC
+    BE -- "hooks invoke guards (JSON stdin)" --> GC
+    FE -- "canonical content" --> BLD
+    BE -- "canonical content" --> BLD
+    GC -- "guard-core fan-out" --> BLD
+    BLD -- "codex port (exit-2 dialect)" --> CDX
+    BLD -- "cursor port (.mdc rules, lossy)" --> CUR
+    BLD -- "copilot port (.github/hooks + AGENTS.md)" --> COP
+    COP -- "Windows parity reimpl" --> GPS
+    CPL -- "hook events (JSON envelope)" --> OTB
+    COP -- "hook events (JSON envelope)" --> OTB
+    CMB -- "liveness signals (ping/marco)" --> AFP
+
+    classDef component fill:#eef3fb,stroke:#3b6ea5
+    class MKT,FE,BE,GC,GPS,BLD,CDX,CUR,COP,CPL,OTB,CMB,AFP component

@@ -1,0 +1,73 @@
+%% Data flow — copilot-otel-bridge
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload), then the edge continues to the next stage.
+flowchart LR
+    IN[/"Copilot CLI / Claude Code hook event<br/>raw JSON on stdin or POST body"/]
+
+    subgraph ingress ["ingress"]
+        direction LR
+        EGRESS["hook-egress main()<br/>copilot-otel-bridge/src/hook-egress.ts:5"]
+        EGRESS_out[/"HTTP POST config.bridgeUrl<br/>body: HookEnvelope + traceparent header"/]
+        HTTPD["bridge HTTP server POST /hooks<br/>copilot-otel-bridge/src/bridge.ts:275"]
+        HTTPD_out[/"unknown JSON + configuredEvent<br/>from x-copilot-hook-event or /hooks/#lt;event#gt;"/]
+    end
+
+    GUARD["isHookEnvelope()<br/>copilot-otel-bridge/src/types.ts:61"]
+    GUARD_out[/"branch: already-envelope (relay)<br/>vs raw payload (normalize)"/]
+
+    NORM["normalizeHookPayload()<br/>copilot-otel-bridge/src/normalize.ts:79"]
+    NORM_out[/"NormalizedHookPayload<br/>hook_event_name, session_id, payload_format, timestamp"/]
+
+    SEC["sanitizeJson() + redactSecrets()<br/>copilot-otel-bridge/src/security.ts:82"]
+    SEC_out[/"redacted JsonObject<br/>contentMode off#124;hash#124;full, capped contentMaxBytes"/]
+
+    ENV["createEnvelope()<br/>copilot-otel-bridge/src/envelope.ts:8"]
+    ENV_out[/"HookEnvelope v1.0.0<br/>event_id UUID, observed_at_unix_ms, source, payload"/]
+
+    DEDUPE["createPayloadDeduper()<br/>copilot-otel-bridge/src/dedupe.ts:18"]
+    DEDUPE_out[/"unique envelope<br/>duplicates within dedupeWindowMs dropped"/]
+
+    subgraph durability ["durability"]
+        direction LR
+        SPOOL["writeSpoolFile() / drainSpool()<br/>copilot-otel-bridge/src/io.ts:19"]
+        SPOOL_out[/"spool/#lt;ms#gt;-#lt;uuid#gt;.json mode 0600<br/>replayed on interval + at startup"/]
+        LEDGER["appendJsonLine()<br/>copilot-otel-bridge/src/io.ts:10"]
+        LEDGER_out[/"append-only events.jsonl<br/>1 JSON envelope per line"/]
+    end
+
+    ASM["SpanAssembler.process()<br/>copilot-otel-bridge/src/span-assembler.ts:176"]
+    ASM_out[/"OTEL spans: github.copilot.hook.#lt;event#gt; point span<br/>parented to session/turn/tool/subagent lifecycle spans"/]
+
+    ATTRS["flattenAttributes()<br/>copilot-otel-bridge/src/security.ts:95"]
+    ATTRS_out[/"Record#lt;string, AttributeValue#gt;<br/>max depth 4, 128 attrs, 16 KiB per value"/]
+
+    OTLP["initializeTelemetry() OTLP exporter<br/>copilot-otel-bridge/src/otel.ts:44"]
+    OTLP_out[/"OTLP#47;HTTP batch to OTEL_EXPORTER_OTLP_TRACES_ENDPOINT<br/>default http:#47;#47;127.0.0.1:27432#47;v1#47;traces"/]
+
+    COLL[["otel-collector<br/>copilot-otel-bridge/otel/collector.yml"]]
+
+    subgraph projection ["read path (UI)"]
+        direction LR
+        PROJ["projectSessions() / projectSessionTrace()<br/>copilot-otel-bridge/src/trace-projector.ts:97"]
+        PROJ_out[/"SessionSummary[] and SessionTrace JSON<br/>GET #47;api#47;sessions, #47;api#47;sessions#47;#lt;id#gt;"/]
+        NATIVE["projectNativeConversation()<br/>copilot-otel-bridge/src/native-session.ts:162"]
+        NATIVE_out[/"NativeProjection: conversation nodes + NativeUsage<br/>from #36;COPILOT_HOME#47;session-state#47;#lt;id#gt;#47;events.jsonl"/]
+    end
+
+    UI[["session-trace UI<br/>copilot-otel-bridge/ui/index.html"]]
+
+    IN --> EGRESS --> EGRESS_out --> HTTPD
+    IN --> HTTPD
+    HTTPD --> HTTPD_out --> GUARD --> GUARD_out --> NORM
+    NORM --> NORM_out --> SEC --> SEC_out --> ENV
+    ENV --> ENV_out --> DEDUPE --> DEDUPE_out --> SPOOL
+    SPOOL --> SPOOL_out --> LEDGER --> LEDGER_out --> ASM
+    ASM --> ASM_out --> ATTRS --> ATTRS_out --> OTLP
+    OTLP --> OTLP_out --> COLL
+    LEDGER_out --> PROJ --> PROJ_out --> UI
+    NATIVE --> NATIVE_out --> UI
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class EGRESS,HTTPD,GUARD,NORM,SEC,ENV,DEDUPE,SPOOL,LEDGER,ASM,ATTRS,OTLP,PROJ,NATIVE comp
+    class IN,EGRESS_out,HTTPD_out,GUARD_out,NORM_out,SEC_out,ENV_out,DEDUPE_out,SPOOL_out,LEDGER_out,ASM_out,ATTRS_out,OTLP_out,PROJ_out,NATIVE_out payload

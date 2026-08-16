@@ -1,0 +1,52 @@
+%% Data flow — fintech-plugins
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload) describing the concrete output payload, then the edge
+%% continues to the next stage: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: Claude Code session events<br/>PreToolUse #124; PostToolUse #124; SessionStart (tool-call JSON on stdin)"/]
+
+    MAN["plugin manifest + tool surface<br/>plugins/fintech-backend/.claude-plugin/plugin.json"]
+    MAN_out[/"registered plugin: agents (12+7), skills (15+8), commands (8+6),<br/>MCP {context7, microsoft-learn #124; chrome-devtools, context7}, LSP {csharp #124; typescript}"/]
+
+    DISPATCH["hooks.json event dispatch (#36;{CLAUDE_PLUGIN_ROOT}/scripts/...)<br/>plugins/fintech-backend/hooks/hooks.json:4"]
+    DISPATCH_out[/"matched script invocations:<br/>Bash to block-* :6 :7, Write#124;Edit#124;MultiEdit to guard-*-write :13,<br/>PostToolUse format-* :21 and matcher '' audit-log :27, SessionStart *-context :34"/]
+
+    subgraph pre ["PreToolUse — enforcement"]
+        direction LR
+        GBASH["block-destructive.sh :7 + block-secrets-exfil.sh :7<br/>plugins/fintech-backend/scripts/block-destructive.sh:7"]
+        GBASH_out[/"deny JSON {hookSpecificOutput:{permissionDecision:deny,reason}} exit 0<br/>or silent exit 0 (allow)"/]
+        GWRITE["guard-backend-write.sh :8 / guard-frontend-write.sh :9<br/>plugins/fintech-backend/scripts/guard-backend-write.sh:8"]
+        GWRITE_out[/"deny JSON on PAN#47;SSN#47;secret#47;float-money#47;Migrate()#47;storage#47;VITE_*<br/>or exit 0 (allow)"/]
+    end
+
+    subgraph post ["PostToolUse — side effects"]
+        direction LR
+        FMT["format-backend.sh :8 / format-frontend.sh :9<br/>plugins/fintech-frontend/scripts/format-frontend.sh:9"]
+        FMT_out[/"file rewritten in place by dotnet format #124; prettier<br/>best-effort, always exit 0"/]
+        AUDIT["audit-log.sh JSONL writer<br/>plugins/fintech-backend/scripts/audit-log.sh:9"]
+        AUDIT_out[/"1 JSONL line {ts,user,session,tool,cwd,file,input_digest,ok}<br/>appended to #36;CLAUDE_FINTECH_AUDIT_DIR/&lt;UTC-date&gt;.jsonl (:17)"/]
+    end
+
+    CTX["SessionStart context injectors<br/>plugins/fintech-backend/scripts/backend-context.sh:6"]
+    CTX_out[/"stdout text: regime banner, branch + dirty count,<br/>enforced invariants, conditional migration#47;ISO-20022#47;dnd warnings"/]
+
+    SESSION[["Claude Code session (transcript + tool executor)"]]
+    AUDITDIR[["#36;CLAUDE_FINTECH_AUDIT_DIR (default ~/.claude-fintech-audit)"]]
+    WORKTREE[["developer working tree"]]
+
+    IN --> MAN --> MAN_out --> DISPATCH
+    DISPATCH --> DISPATCH_out --> GBASH
+    DISPATCH_out --> GWRITE
+    DISPATCH_out --> FMT
+    DISPATCH_out --> AUDIT
+    DISPATCH_out --> CTX
+    GBASH --> GBASH_out --> SESSION
+    GWRITE --> GWRITE_out --> SESSION
+    FMT --> FMT_out --> WORKTREE
+    AUDIT --> AUDIT_out --> AUDITDIR
+    CTX --> CTX_out --> SESSION
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class MAN,DISPATCH,GBASH,GWRITE,FMT,AUDIT,CTX comp
+    class IN,MAN_out,DISPATCH_out,GBASH_out,GWRITE_out,FMT_out,AUDIT_out,CTX_out payload

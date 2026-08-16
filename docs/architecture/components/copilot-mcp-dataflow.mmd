@@ -1,0 +1,64 @@
+%% Data flow — copilot-mcp
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload), then the edge continues to the next stage.
+flowchart LR
+    IN[/"MCP client request<br/>JSON-RPC 2.0 tools#47;call over stdio #124; HTTP #124; WS"/]
+
+    subgraph transport ["transport"]
+        direction LR
+        STDIO["stdio entry serveStdio()<br/>copilot-mcp/src/transports/stdio.ts:8"]
+        STDIO_out[/"NDJSON bytes on stdin<br/>stdout reserved for protocol, stderr for logs"/]
+        HTTPT["http.createServer()<br/>copilot-mcp/src/transports/http.ts:39"]
+        HTTPT_out[/"HTTP request body<br/>bound to config.host:config.httpPort (27443)"/]
+        WST["attachWebSocket()<br/>copilot-mcp/src/transports/ws.ts:58"]
+        WST_out[/"WebSocket frames<br/>upgraded from the same HTTP server"/]
+    end
+
+    FRAME["NdjsonFramer<br/>copilot-mcp/src/jsonrpc/helpers.ts:29"]
+    FRAME_out[/"JsonRpcMessage objects<br/>one per newline-delimited chunk"/]
+
+    ENDPOINT["JsonRpcEndpoint dispatch<br/>copilot-mcp/src/jsonrpc/helpers.ts:136"]
+    ENDPOINT_out[/"(method, params, id) routed to handler<br/>requests vs notifications split"/]
+
+    SERVER["buildServer() tool registry<br/>copilot-mcp/src/server.ts:50"]
+    SERVER_out[/"zod-validated tool input<br/>ask #124; session_* #124; models_list #124; status #124; ask_#lt;persona#gt;"/]
+
+    PERSONA["loadPersonas()<br/>copilot-mcp/src/personas.ts:44"]
+    PERSONA_out[/"Persona[] (chewy, buzz, goose)<br/>each adds one ask_#lt;name#gt; tool at src/server.ts:204"/]
+
+    subgraph session ["session management"]
+        direction LR
+        CLIENT["CopilotBridge.client()<br/>copilot-mcp/src/bridge/copilot-bridge.ts:63"]
+        CLIENT_out[/"CopilotClient singleton<br/>one wrapped CLI child, started once"/]
+        CREATE["CopilotBridge.createSession()<br/>copilot-mcp/src/bridge/copilot-bridge.ts:91"]
+        CREATE_out[/"SessionInfo{session_id, persona, model}<br/>+ subscribed event stream"/]
+    end
+
+    ASK["CopilotBridge.ask()<br/>copilot-mcp/src/bridge/copilot-bridge.ts:181"]
+    ASK_out[/"prompt dispatched to Copilot CLI subprocess<br/>deadline config.askTimeoutMs (default 300000)"/]
+
+    CLI[["GitHub Copilot CLI child process"]]
+    CLI_out[/"SDK event stream<br/>message #47; tool #47; usage #47; unknown events"/]
+
+    CORR["JsonRpcCorrelator<br/>copilot-mcp/src/jsonrpc/helpers.ts:77"]
+    CORR_out[/"AskResult{text, events, usage}<br/>matched to the in-flight request id"/]
+
+    RESULT["makeResult() #47; makeError()<br/>copilot-mcp/src/jsonrpc/types.ts:99"]
+    RESULT_out[/"JsonRpcSuccess or JsonRpcErrorResponse<br/>{code, message, data?} shaped once"/]
+
+    OUT[["MCP client (Claude Code #47; Codex #47; Cursor)"]]
+
+    IN --> STDIO --> STDIO_out --> FRAME
+    IN --> HTTPT --> HTTPT_out --> FRAME
+    IN --> WST --> WST_out --> FRAME
+    FRAME --> FRAME_out --> ENDPOINT --> ENDPOINT_out --> SERVER
+    PERSONA --> PERSONA_out --> SERVER
+    SERVER --> SERVER_out --> CLIENT
+    CLIENT --> CLIENT_out --> CREATE --> CREATE_out --> ASK
+    ASK --> ASK_out --> CLI --> CLI_out --> CORR
+    CORR --> CORR_out --> RESULT --> RESULT_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class STDIO,HTTPT,WST,FRAME,ENDPOINT,SERVER,PERSONA,CLIENT,CREATE,ASK,CORR,RESULT comp
+    class IN,STDIO_out,HTTPT_out,WST_out,FRAME_out,ENDPOINT_out,SERVER_out,PERSONA_out,CLIENT_out,CREATE_out,ASK_out,CLI_out,CORR_out,RESULT_out payload
