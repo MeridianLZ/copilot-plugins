@@ -1,0 +1,13 @@
+%% System overview — one subgraph per architectural component.
+%% Edges = real dependencies from the dependency graph, labeled with what flows.
+flowchart TD
+    subgraph comp_a["component-a<br/>(responsibility)"]
+        A1["entry point<br/>path/file.ext:LINE"]
+    end
+    subgraph comp_b["component-b<br/>(responsibility)"]
+        B1["core symbol<br/>path/file.ext:LINE"]
+    end
+    A1 -- "what flows (format)" --> B1
+
+    classDef component fill:#eef3fb,stroke:#3b6ea5
+    class A1,B1 component

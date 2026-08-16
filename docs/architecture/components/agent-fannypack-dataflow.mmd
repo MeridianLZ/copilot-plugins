@@ -1,0 +1,51 @@
+%% Data flow — agent-fannypack
+%% Invariant: every stage node is immediately followed by its *_out payload node
+%% (class payload), then the edge continues: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: MCP tool call (JSON-RPC)<br/>ping | marco | blast_timer_start | check_in | blast_timer_status"/]
+
+    REG["tool registration barrel<br/>agent-fannypack/mcp/src/index.ts:1"]
+    REG_out[/"payload: RegisteredTool[] on host McpServer<br/>Zod input/output schemas attached"/]
+
+    subgraph liveness ["liveness handlers"]
+        direction LR
+        PING["registerPing handler<br/>src/ping.ts:36"]
+        PING_out[/"payload: PongPayload<br/>#123;pong:true, ts, uptime_ms, echo?, identity?#125;"/]
+        MARCO["registerMarco handler<br/>src/marco.ts:49"]
+        MARCO_out[/"payload: MarcoResult<br/>#123;reply, rtt_ms, ok: reply==polo#125; or timeout Error"/]
+    end
+
+    RESPOND["injected agent respond()<br/>src/marco.ts:50 (default local polo)"]
+    RESPOND_out[/"payload: raw reply (string | MCP content blocks)<br/>unwrapped by extractReply src/marco.ts:95"/]
+
+    subgraph watchdog ["blast timer"]
+        direction LR
+        START["BlastTimer.start<br/>src/blast-timer.ts:34"]
+        START_out[/"payload: #123;armed:true, duration_ms, deadline ISO#125;<br/>RangeError if duration &lt;= 0"/]
+        CHECKIN["BlastTimer.checkIn / withCheckIn<br/>src/blast-timer.ts:52, :246"]
+        CHECKIN_out[/"payload: #123;remaining_ms, check_ins#125;<br/>full window re-armed (#35;arm :99, handle.unref)"/]
+        DETONATE["BlastTimer.#35;detonate<br/>src/blast-timer.ts:108"]
+        DETONATE_out[/"payload: detonated=true + every onExpire cb run<br/>host teardown: close transport, purge sessions"/]
+        STATUS["BlastTimer.status<br/>src/blast-timer.ts:87"]
+        STATUS_out[/"payload: BlastTimerStatus<br/>#123;armed, detonated, duration_ms, remaining_ms, deadline, last_signal, check_ins#125;"/]
+    end
+
+    OUT[["host MCP server / calling agent<br/>e.g. copilot-mcp tool surface"]]
+
+    IN --> REG --> REG_out --> PING
+    REG_out --> MARCO
+    REG_out --> START
+    REG_out --> CHECKIN
+    REG_out --> STATUS
+    PING --> PING_out --> OUT
+    MARCO --> RESPOND --> RESPOND_out --> MARCO_out --> OUT
+    START --> START_out --> CHECKIN
+    CHECKIN --> CHECKIN_out --> OUT
+    START_out --> DETONATE
+    DETONATE --> DETONATE_out --> OUT
+    STATUS --> STATUS_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class REG,PING,MARCO,RESPOND,START,CHECKIN,DETONATE,STATUS comp
+    class IN,REG_out,PING_out,MARCO_out,RESPOND_out,START_out,CHECKIN_out,DETONATE_out,STATUS_out payload

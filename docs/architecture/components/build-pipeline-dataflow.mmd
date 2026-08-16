@@ -1,0 +1,68 @@
+%% Data flow — build-pipeline
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload) describing the concrete output payload, then the edge
+%% continues to the next stage: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: canonical sources<br/>plugins/fintech-{frontend,backend}/ (agents, skills, .mcp.json, scripts)"/]
+    IN_GUARD[/"input: shared/guards/guard-core.sh (137 lines)"/]
+    IN_AGENTS[/"input: targets/copilot/AGENTS.md"/]
+
+    PRE["preflight: ROOT + cd, jq required<br/>build/build.sh:10"]
+    PRE_out[/"cwd = repo root; exit 1 if jq absent"/]
+
+    subgraph codex ["codex stage (build.sh:17-36)"]
+        direction LR
+        CX["skills copied verbatim, agents stripped via strip_fm_keys<br/>build/build.sh:15"]
+        CX_out[/"targets/codex/plugins/*/skills/&lt;n&gt;/SKILL.md<br/>model:/tools: removed from frontmatter"/]
+        CXA["guard + .mcp.json + context/audit scripts copy, chmod +x<br/>build/build.sh:29"]
+        CXA_out[/"targets/codex/plugins/*/scripts/{guard-core,*-context,audit-log}.sh<br/>+ .mcp.json (executable bits set)"/]
+    end
+
+    CUR["cursor stage: guard copy only<br/>build/build.sh:39"]
+    CUR_out[/"targets/cursor/.cursor/hooks/guard-core.sh (executable)"/]
+
+    subgraph copilot ["copilot stage (build.sh:42-62)"]
+        direction LR
+        CPA["agent to .agent.md, name/description re-emitted<br/>build/build.sh:48"]
+        CPA_out[/"frontmatter {name, description, tools[]} + post-frontmatter body (:56)"/]
+        CPT["tool tiering by agent name<br/>build/build.sh:50"]
+        CPT_out[/"tools: read search (auditor#124;code-reviewer#124;microservice-architect)<br/>else read edit search shell"/]
+        CPG["guard fan-out to scripts/ and .github/hooks/scripts/<br/>build/build.sh:59"]
+        CPG_out[/"2x guard-core.sh + chmod +x on *.sh and *.ps1 (:62)"/]
+    end
+
+    FAN["AGENTS.md fan-out<br/>build/build.sh:65"]
+    FAN_out[/"targets/{codex,cursor,copilot}/AGENTS.md (identical copies)"/]
+
+    VJ["jq empty over marketplace/plugin/hooks/target JSON<br/>build/build.sh:69"]
+    VJ_out[/"per-file pass, or 'INVALID JSON: path' + fail=1"/]
+
+    VS["bash -n over every *.sh outside .git<br/>build/build.sh:74"]
+    VS_out[/"per-file pass, or 'SYNTAX: path' + fail=1"/]
+
+    VERDICT["verdict<br/>build/build.sh:75"]
+    VERDICT_out[/"'build: OK' exit 0  #124;  'build: FAILED' exit 1"/]
+
+    OUT[["targets/codex, targets/cursor, targets/copilot"]]
+    CI[["developer shell / CI gate"]]
+
+    IN --> PRE
+    IN_GUARD --> PRE
+    PRE --> PRE_out --> CX
+    CX --> CX_out --> CXA
+    CXA --> CXA_out --> CUR
+    CUR --> CUR_out --> CPA
+    CPA --> CPA_out --> CPT
+    CPT --> CPT_out --> CPG
+    CPG --> CPG_out --> FAN
+    IN_AGENTS --> FAN
+    FAN --> FAN_out --> VJ
+    VJ --> VJ_out --> VS
+    VS --> VS_out --> VERDICT
+    VERDICT --> VERDICT_out --> CI
+    FAN_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class PRE,CX,CXA,CUR,CPA,CPT,CPG,FAN,VJ,VS,VERDICT comp
+    class IN,IN_GUARD,IN_AGENTS,PRE_out,CX_out,CXA_out,CUR_out,CPA_out,CPT_out,CPG_out,FAN_out,VJ_out,VS_out,VERDICT_out payload

@@ -1,0 +1,47 @@
+%% Data flow — target-ports
+%% Invariant: every stage node is immediately followed by its *_out payload node
+%% (class payload), then the edge continues: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: canonical sources<br/>plugins/*/#123;agents,skills,scripts#125; + shared/guards/guard-core.sh"/]
+
+    BUILD["build.sh generation<br/>build/build.sh:17"]
+    BUILD_out[/"payload: overwritten targets/ tree<br/>never hand-edited; exit 1 on any jq/bash -n failure"/]
+
+    subgraph ports ["per-target layouts"]
+        direction LR
+        CODEX["codex port<br/>build/build.sh:17-36"]
+        CODEX_out[/"payload: skills/*/SKILL.md (model:/tools: stripped)<br/>+ hooks.json (same event names) + guard-core.sh"/]
+        CURSOR["cursor port<br/>build/build.sh:38-40"]
+        CURSOR_out[/"payload: .cursor/rules/*.mdc (advisory)<br/>+ hooks.json: beforeShellExecution, beforeMCPExecution only"/]
+        COPILOT["copilot port<br/>build/build.sh:42-62"]
+        COPILOT_out[/"payload: .github/hooks/fintech-compliance.json<br/>+ agents/*.agent.md (tool tiers) + guard-core.#123;sh,ps1#125;"/]
+    end
+
+    FANOUT["AGENTS.md fan-out<br/>build/build.sh:65"]
+    FANOUT_out[/"payload: identical AGENTS.md<br/>in codex/, cursor/, copilot/"/]
+
+    RT_CODEX["Codex runtime hook<br/>guard-core.sh --dialect codex"]
+    RT_CODEX_out[/"payload: exit 2 + stderr reason on deny<br/>exit 0 on allow"/]
+    RT_CURSOR["Cursor adapter<br/>targets/cursor/.cursor/hooks/guard-cursor.sh:12"]
+    RT_CURSOR_out[/"payload: #123;permission: deny|allow|ask#125;<br/>+ userMessage/agentMessage; ask when jq missing"/]
+    RT_COPILOT["Copilot preToolUse<br/>.github/hooks/fintech-compliance.json:13"]
+    RT_COPILOT_out[/"payload: non-zero exit = deny<br/>fail-closed exit 3 when jq absent; audit JSONL on postToolUse"/]
+
+    GAP["pre-commit + CI gate<br/>targets/copilot/scripts/pre-commit"]
+    GAP_out[/"payload: BLOCKED: reason + exit 1 (plain dialect)<br/>closes Cursor write-time gap"/]
+
+    OUT[["consuming agent runtimes<br/>Codex CLI · Cursor · Copilot CLI"]]
+
+    IN --> BUILD --> BUILD_out --> CODEX
+    BUILD_out --> CURSOR
+    BUILD_out --> COPILOT
+    BUILD_out --> FANOUT --> FANOUT_out --> OUT
+    CODEX --> CODEX_out --> RT_CODEX --> RT_CODEX_out --> OUT
+    CURSOR --> CURSOR_out --> RT_CURSOR --> RT_CURSOR_out --> OUT
+    CURSOR_out --> GAP --> GAP_out --> OUT
+    COPILOT --> COPILOT_out --> RT_COPILOT --> RT_COPILOT_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class BUILD,CODEX,CURSOR,COPILOT,FANOUT,RT_CODEX,RT_CURSOR,RT_COPILOT,GAP comp
+    class IN,BUILD_out,CODEX_out,CURSOR_out,COPILOT_out,FANOUT_out,RT_CODEX_out,RT_CURSOR_out,RT_COPILOT_out,GAP_out payload

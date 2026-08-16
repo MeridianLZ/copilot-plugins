@@ -1,0 +1,35 @@
+%% Data flow — plugin-marketplace
+%% Invariant: every stage node is immediately followed by its *_out payload node
+%% (class payload), then the edge continues: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: user command<br/>/plugin marketplace add #quot;repo-path#quot;"/]
+
+    subgraph manifests ["manifest layer"]
+        direction LR
+        MPC["Claude marketplace manifest<br/>.claude-plugin/marketplace.json:1"]
+        MPC_out[/"payload: #123;name, owner, plugins[2]#125;<br/>source: ./plugins/fintech-#123;frontend,backend#125;"/]
+        MPG["Copilot marketplace manifest<br/>.github/plugin/marketplace.json:1"]
+        MPG_out[/"payload: #123;metadata.pluginRoot, plugins[1]#125;<br/>copilot-home + agents/skills/commands/hooks keys"/]
+    end
+
+    PARSE["host manifest parse + schema check<br/>(jq empty gate: build/build.sh:69)"]
+    PARSE_out[/"payload: registry entries<br/>#123;name, source, description#125;[] or INVALID JSON (build exit 1)"/]
+
+    RESOLVE["plugin resolution<br/>source path to plugin dir"]
+    RESOLVE_out[/"payload: resolved roots<br/>plugins/fintech-backend/.claude-plugin/plugin.json + siblings"/]
+
+    INSTALL["install + surface registration<br/>agents, skills, commands, hooks.json, .mcp.json"]
+    INSTALL_out[/"payload: session install record<br/>fintech-backend@fintech-marketplace<br/>hooks wired to CLAUDE_PLUGIN_ROOT scripts"/]
+
+    OUT[["fintech-plugins / copilot-plugin<br/>(runtime surfaces)"]]
+
+    IN --> MPC --> MPC_out --> PARSE
+    IN --> MPG --> MPG_out --> PARSE
+    PARSE --> PARSE_out --> RESOLVE
+    RESOLVE --> RESOLVE_out --> INSTALL
+    INSTALL --> INSTALL_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-width:1px,stroke-dasharray: 4 3,color:#3b2f00
+    classDef comp fill:#eef4ff,stroke:#3b5bdb,stroke-width:1px,color:#10204d
+    class MPC,MPG,PARSE,RESOLVE,INSTALL comp
+    class IN,MPC_out,MPG_out,PARSE_out,RESOLVE_out,INSTALL_out payload

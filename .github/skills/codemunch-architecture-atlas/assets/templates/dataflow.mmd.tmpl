@@ -1,0 +1,16 @@
+%% Data flow — <component name>
+%% Invariant: every stage node is immediately followed by its *_out payload
+%% node (class payload) describing the concrete output payload, then the edge
+%% continues to the next stage: STAGE --> STAGE_out --> NEXT.
+flowchart LR
+    IN[/"input: <source + format>"/]
+    S1["<stage 1><br/>path/file.ext:LINE"]
+    S1_out[/"payload: <return type / JSON shape / file written / exit code>"/]
+    S2["<stage 2><br/>path/file.ext:LINE"]
+    S2_out[/"payload: <...>"/]
+    OUT[["<destination / neighbor component>"]]
+
+    IN --> S1 --> S1_out --> S2 --> S2_out --> OUT
+
+    classDef payload fill:#fff8dc,stroke:#b8860b,stroke-dasharray:4 3
+    class IN,S1_out,S2_out payload
