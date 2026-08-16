@@ -60,3 +60,11 @@ _Append-only reusable patterns and lessons for working in this repo (and similar
 - **Persona voice ≠ persona judgment**: custom-agent prompts shaped peer *reasoning* immediately, but self-introduction stayed "I'm Copilot" until an explicit identity-override preamble was added. Test identity separately from role fidelity.
 - **Deadline-monitor discipline paid off**: every subagent got a sleep-N fallback Monitor; two agents went idle without reporting and were recovered by ping; one was respawned. Zero silent waits.
 - **Sweep-then-revert for prose/identifier renames**: perl word-boundary sweep with negative lookarounds, then targeted reverts of known identifier patterns (frontmatter name/handoffs, slugs, arg values), then grep audit — safer than trying one perfect regex.
+
+## 2026-08-15/16 — patterns from the mermaid-skill build
+
+- **Re-check filesystem state immediately before destructive ops**: a symlink created by a concurrent session between my `ls` and my `rm -rf` redirected the delete onto the live data. The check and the mutation must be adjacent — same command, ideally (`[ -L path ]` guard inline).
+- **Session transcripts are a recovery source**: `~/.claude/projects/<proj>/<session>.jsonl` holds full Write/Edit tool payloads — replayable chronologically to reconstruct files. Limits: misses Bash-heredoc writes; sizes drift from later edits. Git in the target dir beats it every time.
+- **Research swarm → files, not context**: split Workflow result JSON into per-topic scratchpad .md files (`jq`/python), then read only the topic needed (color-theme.md) — kept 50k chars of notes out of context.
+- **Exact upstream hexes beat from-memory palettes**: opencode's Nord adds a non-Nord token (`#8B95A7` muted) that memory-Nord would miss; fetched `sst/opencode nord.json` raw. Same for Solarized — canonical 16 from ethanschoonover.
+- **Giant MCP results**: when a tool result overflows to a file, extract the one field you need with `jq` instead of reading the dump (150k SVG payloads for a boolean `valid`).

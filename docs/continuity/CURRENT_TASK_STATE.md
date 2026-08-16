@@ -1,26 +1,28 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-07 (scope: copilot-home plugin + persona MCP tools; supersedes 2026-08-06 "trace-UI conversation replica" state — that work merged to main via PR-equivalent merges `cfdb37f`/`8786d33`)_
+_Last updated: 2026-08-16 (scope: copilot-fe mermaid design-vault skill; supersedes 2026-08-07 "copilot-home plugin + persona MCP tools" state — that work merged to main `d94ec4c` and remains stable)_
 
 ## Where things stand
 
-**Everything is merged to `main` (`d94ec4c`) and pushed.** Two workstreams landed today:
+**Mermaid diagram-mastery skill for the copilot-fe profile is complete, verified, and committed.** The deliverable lives OUTSIDE this repo, in the `~/.agents` git repo (profile SSOT): `~/.agents/settings/global/copilot-profiles/fe/skills/mermaid/` — SKILL.md router + 8 reference files (core-syntax, advanced-techniques, color-systems, design-methodology, component-grammar, connector-grammar, compatibility-validation, pattern-library) + 3 scripts (mermaid-lint.sh, theme-scaffold.sh, validate-vault.sh) + evals/fixtures. Copilot sees it via symlink `~/.copilot-fe/skills → ~/.agents/.../fe/skills`.
 
-1. **copilot-home Copilot CLI plugin** — built in worktree `/Volumes/MACDEV/fable-medium_copilot_plugin` (branch `fable-medium_copilot_plugin`, merged to main): `copilot-plugin/` with 7 agents (primary-orchestrator, csharp-azure-architect, foundry-sdk-implementer, ai-research-engineer + peers Chewy/Buzz/Goose), each agent = `.agent.md` (full frontmatter) + system-prompt/specialized_role/mission fused assets; 22 skills + 22 TOML slash evokers; dual-lane hooks (plugin `${PLUGIN_ROOT}` workaround + `.github` projection payload); agent_blackboard (append-only JSONL/session, trace_id = md5(session_id)); `~/.copilot` user-scope templates + installer skill; `docs/injection-and-projection.md`; root `.github/plugin/marketplace.json` (marketplace `copilot-home-marketplace`).
+Commits in `~/.agents`: `6ed5c69` (skill+wiring), `b138101` (TOCs), `addf0e7` (grammar/pattern refs, validator, evals), `bfea7df` (four vault themes), `a3ae84c` (derived theme mode, allowed-tools, 11.16.1 baseline, validator version-check fix). Working tree clean.
 
-2. **copilot-mcp persona tools** (branch `feat/copilot-otel-replica`, merged): `chewy`/`buzz`/`goose` MCP tools (12 → 15) pin an SDK custom agent per session (`customAgents` + `agent` select-at-create, `infer:false`); personas fused at startup from `COPILOT_MCP_PERSONA_DIR` (default = the worktree's `copilot-plugin/agents` — cross-tree dependency, deliberate); identity preamble fix (`d2c1fa1`) so peers introduce as Chewy/Buzz/Goose, not "Copilot"; proper-noun capitalization sweep (`c9cfb48`/`b6022a4`, prose only — machine identifiers stay lowercase).
+**Four canonical themes** (user spec, color-systems.md §6, all WCAG-checked, all render-validated via Mermaid Chart MCP): `light` (beige `#FAF6F0` + terracotta `#C2410C`), `dark` (slate `#0F172A/#1E293B` + neon cyan `#22D3EE`/lime `#A3E635`), `nord` (exact opencode hexes from `sst/opencode` `nord.json`, incl. non-Nord muted `#8B95A7`), `solarized-dark` (canonical ethanschoonover hexes). `theme-scaffold.sh --theme <name>` emits frontmatter; also has derived `--from-bg/--from-fg` two-color mode (linear hex mix, not contrast-guaranteed).
 
-**Live-fire verified** (stdio MCP client, real Copilot turns): identity by name, session persistence, distinct role fidelity, readonly write denied, sanitized events, 500-event ring cap, timeout guard, clean destroy; four-way 6-round debate with by-name cross-referencing and accurate cross-memory; blackboard audit 32 lines, 0 malformed, stable trace_id. `copilot-mcp` registered in Claude Code user scope (`claude mcp add`, ✔ Connected) — native `mcp__copilot-mcp__*` visible after session restart.
+This repo (`fintech-marketplace`) is untouched this session: clean at `18d34c1`. `/Volumes/MACDEV` briefly unmounted 2026-08-16 (drive detached), remounted — `git fsck` clean.
+
+## Incident (resolved, lessons in REMEMBER)
+
+2026-08-15: a peer session built the same skill concurrently and converted `~/.copilot-fe/skills` from real dir to symlink mid-task; my consolidation `rm -rf $SSOT/mermaid` deleted the live skill through it. Recovered 100% via `git restore` in `~/.agents` (the peer session had committed). Theme work re-applied, everything re-verified.
 
 ## Immediate next step
 
-**In flight:** locate the four-way persona conversation in OTel traces and open the trace-UI conversation replica (copilot-otel-bridge, port 14329) displaying it. Peer sessions live in `~/.copilot/session-state/{271242fd…,14e5787f…,fb7022cb…}` (disconnected, not deleted; native `events.jsonl` present).
+None in flight — skill done. Optional follow-ups: mine the 6-agent research swarm's raw notes (scratchpad `tasks/{official-docs,components-connectors,color-theme,avant-garde,methodology,renderer-compat}.md` — session-scoped, may be gone) for more pattern-library material; repo-side open items from 2026-08-07 still stand (OTel trace of four-way conversation; guard-core duplication cleanup, PLANS phase 3).
 
-Then: optional — plugin live-install into Copilot CLI (`copilot plugin marketplace add`), phase-2 OTel exporter tailing the blackboard JSONL.
+## Key decisions (2026-08-15/16)
 
-## Key decisions (2026-08-07)
-
-- Persona mechanism = SDK `customAgents` + `agent` pin + `infer:false` (NOT systemMessage-only, NOT prompt-prefix); `systemMessage {mode:"replace"}` forbidden — SDK documents it as removing security guardrails.
-- Persona SSoT = plugin markdown, loaded at server startup; identity preamble prepended in code (`personas.ts`) because the CLI's built-in identity section wins self-introductions otherwise.
-- Proper nouns capitalized in prose only; identifiers (tool names, dirs, frontmatter name/handoffs, slugs, `--peers` values, `agent_name` payloads) stay lowercase.
-- Blackboard stays naive-baseline JSONL (the peers themselves voted NO-GO on a temporal-KG replacement in live testing — reasons matching the ai-research-engineer persona: replayability, boring-on-purpose).
+- Themes are single-mode by design (no `--dark` flag): pick by page background. Old `--palette` kept as back-compat alias for `--theme`.
+- Neon discipline (dark theme): neon = strokes/edges/one highlighted path only; fills stay slate; dark text on any neon fill.
+- validate-vault checks for any pinned `verified-against: mermaid@X.Y.Z`, not a hardcoded patch version (broke on 11.16.0→11.16.1 bump).
+- Skill SSOT = `~/.agents` (git repo); profile dirs are symlinks. Always commit there after changes — it's the safety net.

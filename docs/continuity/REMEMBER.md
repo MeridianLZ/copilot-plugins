@@ -73,6 +73,14 @@ _Append-only durable facts, invariants, and pitfalls. Do not delete; correct wit
 - agent_blackboard: `${COPILOT_PLUGIN_DATA:-~/.copilot/plugin-data/copilot-home}/agent_blackboard/<session_id>.jsonl`, append-only, trace_id = md5(session_id) (deterministic, coordination-free), fresh 16-hex span per line — OTel phase joins on it as-is.
 - `claude mcp add copilot-mcp --scope user -- node <abs>/copilot-mcp/dist/transports/stdio.js` done on largo; new MCP servers are NOT visible mid-session — restart or /mcp. pnpm store for repo installs: `--store-dir /Volumes/MACDEV/.pnpm-store` (HOME is at 2.9Gi).
 
+## 2026-08-16 — copilot-fe profile + mermaid skill
+
+- copilot-fe profile SSOT = `~/.agents/settings/global/copilot-profiles/fe/` (a **git repo** — commit after every change; it saved us). Entries in `~/.copilot-fe/` (settings, instructions, hooks, skills) are symlinks into it. `COPILOT_HOME=~/.copilot-fe`, launched via `copilot-profile --profile fe`.
+- Peer sessions edit these dirs concurrently and may convert a real dir to a symlink mid-task: on 2026-08-15 that turned an `rm -rf "$SSOT/mermaid"` into deletion of the live skill. `ls -la` the exact path immediately before any destructive op — earlier observations go stale in minutes.
+- Recovery lanes that worked, in order: `git restore` in the SSOT repo (complete); replaying Write/Edit payloads from peer-session transcript JSONL under `~/.claude/projects/` (partial — misses Bash-heredoc writes and later edits); `tmutil listlocalsnapshots` (empty on largo).
+- mermaid vault themes: single-mode by design (no --dark variant flag); `--palette` is a back-compat alias for `--theme`; validate-vault must never pin a patch version (broke on 11.16.0→11.16.1).
+- Mermaid Chart MCP tool (`validate_and_render_mermaid_diagram`) returns ~80-150k-char payloads — result lands in a tool-results file; check with `jq '{valid, diagramType}'`, never read whole file.
+
 ## 2026-08-16 — three-tier span taxonomy (SPAN_SSOT)
 
 - **Correction:** test count gate is now **39** node:test cases (`pnpm check`), superseding 34 (2026-08-06 late).
