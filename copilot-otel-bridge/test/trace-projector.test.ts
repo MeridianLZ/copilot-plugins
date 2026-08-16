@@ -92,6 +92,11 @@ test('projectSessionTrace reconstructs lifecycle spans with correct pairing', ()
   assert.equal(bash.status, 'ok');
   assert.equal(bash.parent_id, turn.span_id);
   assert.equal(bash.end_unix_ms, base + 3_000);
+  assert.equal(bash.name, 'execute_tool bash');
+  assert.equal(bash.tier, 1);
+  assert.equal(session.name, 'github.copilot.hook.session');
+  assert.equal(session.tier, 3);
+  assert.ok(points.every((span) => span.name.startsWith('execute_hook ') && span.tier === 1));
 
   const view = lifecycle.find((span) => span.tool_name === 'view');
   assert.ok(view);

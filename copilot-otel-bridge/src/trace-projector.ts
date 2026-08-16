@@ -1,4 +1,5 @@
 import { createPayloadDeduper } from './dedupe.js';
+import { lifecycleSpanName, pointSpanName, spanTier, type SpanTier } from './span-taxonomy.js';
 import {
   getString,
   isHookEnvelope,
@@ -22,6 +23,7 @@ export interface ProjectedSpan {
   span_id: string;
   kind: 'session' | 'turn' | 'tool' | 'subagent' | 'point';
   name: string;
+  tier: SpanTier;
   event?: CopilotHookEventName;
   session_id: string;
   parent_id?: string;
@@ -177,19 +179,21 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
     parentId: string | undefined
   ): OpenRecord => {
     const payload = envelope.payload;
+    const toolName = getString(payload, 'tool_name');
+    const agentName = getString(payload, 'agent_name');
+    const target = kind === 'tool' ? toolName : kind === 'subagent' ? agentName : undefined;
     const span: ProjectedSpan = {
       span_id: nextId(kind),
       kind,
-      name: `github.copilot.hook.${kind}`,
+      name: lifecycleSpanName(kind, target),
+      tier: spanTier(kind),
       session_id: sessionId,
       ...(parentId ? { parent_id: parentId } : {}),
       start_unix_ms: timeMs,
       status: 'open',
       start_event_id: envelope.event_id
     };
-    const toolName = getString(payload, 'tool_name');
     if (kind === 'tool' && toolName !== undefined) span.tool_name = toolName;
-    const agentName = getString(payload, 'agent_name');
     if (kind === 'subagent' && agentName !== undefined) span.agent_name = agentName;
     spans.push(span);
     return { span };
@@ -328,7 +332,8 @@ export function projectSessionTrace(envelopes: readonly HookEnvelope[], sessionI
     const point: ProjectedSpan = {
       span_id: nextId('point'),
       kind: 'point',
-      name: `github.copilot.hook.${event}`,
+      name: pointSpanName(event),
+      tier: spanTier('point'),
       event,
       session_id: sessionId,
       ...(parentId ? { parent_id: parentId } : {}),

@@ -31,6 +31,8 @@ This document distinguishes three things that are easy to conflate:
 
 ## Point-span naming
 
+> **Superseded by [SPAN_SSOT.md](SPAN_SSOT.md)** — point spans are now named `execute_hook <event>` (tier 1); the table below documents the legacy `github.copilot.hook.<event>` names.
+
 Every accepted event creates exactly one point span:
 
 ```text

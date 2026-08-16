@@ -87,6 +87,8 @@ test('tools join by toolCallId with status, duration, and scrubbed results', () 
   assert.equal(tool.tool_name, 'view');
   assert.equal(tool.status, 'ok');
   assert.equal(tool.duration_ms, 500);
+  assert.equal(tool.span_name, 'execute_tool view');
+  assert.equal(tool.span_tier, 1);
   const result = tool.content.find((item) => item.label === 'result');
   const dumped = JSON.stringify(result?.json);
   assert.equal(dumped.includes('ghp_abcdefghij1234567890'), false);

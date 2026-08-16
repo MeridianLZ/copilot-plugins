@@ -72,3 +72,10 @@ _Append-only durable facts, invariants, and pitfalls. Do not delete; correct wit
 - Proper-noun rule (user directive): Chewy/Buzz/Goose capitalized in ALL prose; machine identifiers (tool names, dirs, frontmatter name/handoffs, skill slugs, --peers values, agent_name payload keys) stay lowercase — capitalizing them breaks invocation/lockstep.
 - agent_blackboard: `${COPILOT_PLUGIN_DATA:-~/.copilot/plugin-data/copilot-home}/agent_blackboard/<session_id>.jsonl`, append-only, trace_id = md5(session_id) (deterministic, coordination-free), fresh 16-hex span per line — OTel phase joins on it as-is.
 - `claude mcp add copilot-mcp --scope user -- node <abs>/copilot-mcp/dist/transports/stdio.js` done on largo; new MCP servers are NOT visible mid-session — restart or /mcp. pnpm store for repo installs: `--store-dir /Volumes/MACDEV/.pnpm-store` (HOME is at 2.9Gi).
+
+## 2026-08-16 — three-tier span taxonomy (SPAN_SSOT)
+
+- **Correction:** test count gate is now **39** node:test cases (`pnpm check`), superseding 34 (2026-08-06 late).
+- **Invariant:** span names + payload→attribute maps live ONLY in `copilot-otel-bridge/src/span-taxonomy.ts`; all three projectors consume it and `docs/SPAN_SSOT.md`'s catalog block is generated from `renderCatalogMarkdown()` (doc-sync guard in `test/span-taxonomy.test.ts`).
+- **Breaking rename (2026-08-16):** `github.copilot.hook.tool|subagent|<event>` → `execute_tool {tool}` / `invoke_agent {agent}` / `execute_hook <event>`; `github.copilot.session.id` dropped (equal-info dupe of `gen_ai.conversation.id`). Re-key dashboards on `github.copilot.hook.event.name` / `.lifecycle.kind`.
+- **Invariant:** conversation schema 1.2.0 — every node carries `span_name`/`span_tier` (1 gen_ai, 2 native copilot, 3 hook); UI renders a chip per component; native-lane names are NOMINAL (taxonomy ownership, not observed emission).

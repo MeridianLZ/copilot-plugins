@@ -6,6 +6,7 @@ import {
   type SessionTrace
 } from './trace-projector.js';
 import { projectNativeConversation, type NativeEvent } from './native-session.js';
+import { lifecycleSpanName, pointSpanName, spanTier, type SpanTier } from './span-taxonomy.js';
 import {
   getString,
   type CopilotHookEventName,
@@ -51,6 +52,10 @@ export interface ConversationNode {
   agent_name?: string;
   content: ConversationContent[];
   children: ConversationNode[];
+  /** Originating span name (taxonomy; nominal for native-lane nodes). */
+  span_name?: string;
+  /** Taxonomy tier: 1 gen_ai semconv, 2 native copilot, 3 custom hook. */
+  span_tier?: SpanTier;
   raw_payload?: Record<string, JsonValue>;
   /** Model that produced this node (native lane only). */
   model?: string;
@@ -61,7 +66,7 @@ export interface ConversationNode {
 }
 
 export interface ConversationDocument {
-  schema_version: '1.1.0';
+  schema_version: '1.2.0';
   source: 'native+hooks' | 'hooks-only';
   model?: string;
   usage?: { total_nano_aiu?: number; total_premium_requests?: number; output_tokens?: number };
@@ -145,6 +150,8 @@ function makeEventNode(envelope: HookEnvelope, depth: number, status?: Projected
     timestamp_iso: iso(timeMs),
     title: event,
     depth,
+    span_name: pointSpanName(event),
+    span_tier: spanTier('point'),
     ...(status ? { status } : {}),
     ...(toolName ? { tool_name: toolName } : {}),
     ...(agentName ? { agent_name: agentName } : {}),
@@ -239,6 +246,8 @@ function lifecycleShell(
   const timeMs = eventTimeMs(envelope);
   const toolName = span?.tool_name ?? getString(envelope.payload, 'tool_name');
   const agentName = span?.agent_name ?? getString(envelope.payload, 'agent_name');
+  const spanName = span?.name ?? lifecycleSpanName(kind, toolName ?? agentName);
+  const tier = span?.tier ?? spanTier(kind);
   const title =
     kind === 'session'
       ? 'Session'
@@ -258,6 +267,8 @@ function lifecycleShell(
     ...(span?.status_message ? { status_message: span.status_message } : {}),
     title,
     depth,
+    span_name: spanName,
+    span_tier: tier,
     ...(span?.end_unix_ms != null ? { duration_ms: span.end_unix_ms - span.start_unix_ms } : {}),
     ...(span?.heuristic ? { heuristic: true } : {}),
     ...(toolName ? { tool_name: toolName } : {}),
@@ -303,7 +314,7 @@ function projectNativeFirst(
   ).length;
 
   return {
-    schema_version: '1.1.0',
+    schema_version: '1.2.0',
     source: 'native+hooks',
     ...(native.model !== undefined ? { model: native.model } : {}),
     ...(native.usage !== undefined ? { usage: native.usage } : {}),
@@ -502,7 +513,7 @@ export function projectConversation(
   }
 
   return {
-    schema_version: '1.1.0',
+    schema_version: '1.2.0',
     source: 'hooks-only',
     session_id: sessionId,
     generated_at: new Date().toISOString(),
@@ -580,13 +591,15 @@ function renderNodeMd(node: ConversationNode, level: number): string[] {
           : `-`;
   if (heading === '-') {
     const model = node.model ? ` · ${node.model}` : '';
-    lines.push(`${indent(level)}- **${node.title}** (${node.timestamp_iso}${status}${dur}${heuristic}${model})`);
+    const span = node.span_name ? ` · ${node.span_name} [t${node.span_tier ?? 3}]` : '';
+    lines.push(`${indent(level)}- **${node.title}** (${node.timestamp_iso}${status}${dur}${heuristic}${model}${span})`);
     if (node.reasoning_encrypted) lines.push(`${indent(level + 1)}- _[reasoning encrypted]_`);
     lines.push(...renderContentMd(node.content, level + 1));
   } else {
     lines.push(`${heading} ${node.title}`);
     lines.push('');
     lines.push(`- time: \`${node.timestamp_iso}\``);
+    if (node.span_name) lines.push(`- span: \`${node.span_name}\` (tier ${node.span_tier ?? 3})`);
     if (node.status) lines.push(`- status: \`${node.status}${node.status_message ? ` (${node.status_message})` : ''}\``);
     if (node.duration_ms != null) lines.push(`- duration_ms: \`${node.duration_ms}\``);
     if (node.tool_name) lines.push(`- tool: \`${node.tool_name}\``);

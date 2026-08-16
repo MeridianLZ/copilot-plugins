@@ -12,8 +12,8 @@ import {
 import type { BridgeConfig } from './config.js';
 import { contextFromSpan, contextFromSpanContext, linkFromSpanContext, parseTraceparent, startPointSpan } from './otel.js';
 import { flattenAttributes } from './security.js';
+import { contentAttributes, lifecycleSpanName, payloadAttributes, pointSpanName, spanTier } from './span-taxonomy.js';
 import {
-  getBoolean,
   getObject,
   getString,
   type CopilotHookEventName,
@@ -85,7 +85,7 @@ function errorMessage(payload: NormalizedHookPayload): string | undefined {
   return object ? getString(object, 'message') : undefined;
 }
 
-function coreAttributes(envelope: HookEnvelope): Attributes {
+function coreAttributes(envelope: HookEnvelope, config?: BridgeConfig): Attributes {
   const payload = envelope.payload;
   const attributes: Attributes = {
     'github.copilot.hook.event.name': payload.hook_event_name,
@@ -94,39 +94,9 @@ function coreAttributes(envelope: HookEnvelope): Attributes {
     'github.copilot.hook.payload_format': payload.payload_format,
     'github.copilot.hook.schema_version': envelope.schema_version,
     'github.copilot.hook.observed_at_unix_ms': envelope.observed_at_unix_ms,
-    'github.copilot.session.id': payload.session_id,
-    'gen_ai.conversation.id': payload.session_id
+    ...payloadAttributes(payload),
+    ...(config?.contentMode === 'full' ? contentAttributes(payload) : {})
   };
-
-  const strings: readonly [string, string][] = [
-    ['cwd', 'github.copilot.cwd'],
-    ['source', 'github.copilot.session.source'],
-    ['reason', 'github.copilot.session.end_reason'],
-    ['tool_name', 'gen_ai.tool.name'],
-    ['transcript_path', 'github.copilot.transcript.path'],
-    ['stop_reason', 'github.copilot.stop.reason'],
-    ['agent_id', 'gen_ai.agent.id'],
-    ['agent_type', 'github.copilot.agent.type'],
-    ['agent_name', 'gen_ai.agent.name'],
-    ['agent_display_name', 'github.copilot.agent.display_name'],
-    ['error_context', 'github.copilot.error.context'],
-    ['trigger', 'github.copilot.compaction.trigger'],
-    ['notification_type', 'github.copilot.notification.type'],
-    ['error_type', 'error.type']
-  ];
-  for (const [input, output] of strings) {
-    const value = getString(payload, input);
-    if (value !== undefined) attributes[output] = value;
-  }
-
-  const booleans: readonly [string, string][] = [
-    ['recoverable', 'github.copilot.error.recoverable'],
-    ['stop_hook_active', 'github.copilot.stop_hook_active']
-  ];
-  for (const [input, output] of booleans) {
-    const value = getBoolean(payload, input);
-    if (value !== undefined) attributes[output] = value;
-  }
 
   const toolResult = getObject(payload, 'tool_result');
   if (toolResult) {
@@ -143,10 +113,12 @@ function coreAttributes(envelope: HookEnvelope): Attributes {
 function lifecycleAttributes(
   envelope: HookEnvelope,
   kind: OpenSpanRecord['kind'],
-  correlationKey: string
+  correlationKey: string,
+  config?: BridgeConfig
 ): Attributes {
   return {
-    ...coreAttributes(envelope),
+    ...coreAttributes(envelope, config),
+    'github.copilot.hook.span.tier': spanTier(kind),
     'github.copilot.hook.lifecycle.kind': kind,
     'github.copilot.hook.lifecycle.correlation_key': correlationKey,
     'github.copilot.hook.lifecycle.start_event': envelope.payload.hook_event_name
@@ -180,12 +152,14 @@ export class SpanAssembler {
 
     this.startLifecycle(envelope, timestamp, inherited);
     const resolution = this.resolve(envelope, inherited);
-    const attributes = coreAttributes(envelope);
+    const attributes = coreAttributes(envelope, this.config);
+    attributes['gen_ai.operation.name'] = 'execute_hook';
+    attributes['github.copilot.hook.span.tier'] = spanTier('point');
     if (resolution.heuristic) attributes['github.copilot.hook.relationship.heuristic'] = true;
 
     const point = startPointSpan(
       this.tracer,
-      `github.copilot.hook.${envelope.payload.hook_event_name}`,
+      pointSpanName(envelope.payload.hook_event_name),
       timestamp,
       attributes,
       resolution.parentContext,
@@ -218,9 +192,9 @@ export class SpanAssembler {
         const existing = this.sessions.get(payload.session_id);
         if (existing) this.closeRecovered(existing, timestamp, 'duplicate_start');
         const span = this.tracer.startSpan(
-          'github.copilot.hook.session',
+          lifecycleSpanName('session'),
           {
-            attributes: lifecycleAttributes(envelope, 'session', payload.session_id),
+            attributes: lifecycleAttributes(envelope, 'session', payload.session_id, this.config),
             startTime: timestamp
           },
           contextFromSpanContext(inherited)
@@ -239,9 +213,9 @@ export class SpanAssembler {
         if (existing) this.closeRecovered(existing, timestamp, 'duplicate_start');
         const parent = this.sessions.get(payload.session_id)?.span;
         const span = this.tracer.startSpan(
-          'github.copilot.hook.turn',
+          lifecycleSpanName('turn'),
           {
-            attributes: lifecycleAttributes(envelope, 'turn', payload.session_id),
+            attributes: lifecycleAttributes(envelope, 'turn', payload.session_id, this.config),
             startTime: timestamp,
             links: parent && inherited && !sameSpanContext(spanContextOf(parent), inherited)
               ? [{ context: inherited, attributes: { 'github.copilot.link.reason': 'native_traceparent' } }]
@@ -267,10 +241,10 @@ export class SpanAssembler {
           appendLink(links, inherited, { 'github.copilot.link.reason': 'native_traceparent' });
         }
         const span = this.tracer.startSpan(
-          'github.copilot.hook.tool',
+          lifecycleSpanName('tool', toolName),
           {
             attributes: {
-              ...lifecycleAttributes(envelope, 'tool', key),
+              ...lifecycleAttributes(envelope, 'tool', key, this.config),
               'gen_ai.operation.name': 'execute_tool',
               'gen_ai.tool.name': toolName,
               'gen_ai.tool.type': 'function',
@@ -303,10 +277,10 @@ export class SpanAssembler {
           appendLink(links, inherited, { 'github.copilot.link.reason': 'native_traceparent' });
         }
         const span = this.tracer.startSpan(
-          'github.copilot.hook.subagent',
+          lifecycleSpanName('subagent', agentName),
           {
             attributes: {
-              ...lifecycleAttributes(envelope, 'subagent', key),
+              ...lifecycleAttributes(envelope, 'subagent', key, this.config),
               'gen_ai.operation.name': 'invoke_agent',
               'gen_ai.agent.name': agentName,
               'github.copilot.hook.correlation.limit': 'subagent_start_has_no_agent_id'

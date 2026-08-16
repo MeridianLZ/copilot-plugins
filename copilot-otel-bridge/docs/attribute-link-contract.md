@@ -61,6 +61,8 @@ Complex or heterogeneous arrays become a bounded `.json` string. OpenTelemetry a
 
 ## Standard GenAI attributes used by the bridge
 
+> **Superseded by [SPAN_SSOT.md](SPAN_SSOT.md)** — the tier-1/2/3 attribute catalog (incl. the dropped `github.copilot.session.id` dupe and opt-in content attrs) is generated from `src/span-taxonomy.ts`.
+
 | Attribute | Applied to | Source | Caveat |
 |---|---|---|---|
 | `gen_ai.conversation.id` | all hook spans | Copilot session ID | Exact. |

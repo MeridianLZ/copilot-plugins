@@ -107,12 +107,18 @@ test('native events switch projection to native-first with hook overlay', () => 
     JSON.stringify({ type: 'assistant.turn_end', data: { turnId: 't-0' }, id: 'n5', timestamp: new Date(base + 8_000).toISOString() })
   ];
   const doc = projectConversation(envelopes(), 'sess-conv', parseNativeLines(nativeLines));
-  assert.equal(doc.schema_version, '1.1.0');
+  assert.equal(doc.schema_version, '1.2.0');
   assert.equal(doc.source, 'native+hooks');
   assert.equal(doc.model, 'gpt-5.6-terra');
   assert.equal(doc.turn_count, 1);
   const turn = doc.root.children.find((child) => child.kind === 'turn');
   assert.ok(turn);
+  assert.equal(turn.span_name, 'github.copilot.hook.turn');
+  assert.equal(turn.span_tier, 3);
+  const assistant = turn.children.find((child) => String(child.id).startsWith('native-msg'));
+  assert.ok(assistant);
+  assert.equal(assistant.span_name, 'chat gpt-5.6-terra');
+  assert.equal(assistant.span_tier, 2);
   const assistantText = JSON.stringify(turn);
   assert.ok(assistantText.includes('Done. The thing is complete.'));
   // hook-only governance overlay landed inside the turn window
@@ -122,7 +128,7 @@ test('native events switch projection to native-first with hook overlay', () => 
 
 test('without native events the hooks-only projection is unchanged in shape', () => {
   const doc = projectConversation(envelopes(), 'sess-conv');
-  assert.equal(doc.schema_version, '1.1.0');
+  assert.equal(doc.schema_version, '1.2.0');
   assert.equal(doc.source, 'hooks-only');
   assert.equal(doc.model, undefined);
   assert.equal(doc.turn_count, 1);
