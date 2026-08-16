@@ -1,5 +1,13 @@
 # TASKS
 
+## Done — 2026-08-15/16 (copilot-fe mermaid skill — lives in ~/.agents repo, commits `bfea7df`/`a3ae84c`)
+
+- [x] 6-agent research swarm (Workflow): mermaid 11.16.1 capabilities, themeVariables per diagram type, opencode Nord + Solarized exact hexes, avant-garde techniques, methodology, renderer compat.
+- [x] Four vault themes (light/dark/nord/solarized-dark) in `theme-scaffold.sh --theme` + color-systems.md §6, WCAG-checked, render-validated via Mermaid Chart MCP (flowchart/sequence/state).
+- [x] Recovered skill after rm-rf-through-symlink incident (`git restore` in ~/.agents); saved memory note `copilot-fe-profile-ssot.md`.
+- [x] Fixed validate-vault hardcoded version baseline (now any `mermaid@X.Y.Z`); committed peer session's refinements (derived theme mode, allowed-tools, eval fixture).
+- [x] Verified `/Volumes/MACDEV` repo after drive detach/remount: clean at `18d34c1`, fsck clean.
+
 ## Done — 2026-08-07 (copilot-home plugin + persona MCP tools, merged to main `d94ec4c`)
 
 - [x] Worktree `fable-medium_copilot_plugin`; research team (5 Explore agents) on Copilot CLI 1.0.78 plugin/agent/skill/hook/instruction/MCP schemas + Foundry/copilot-sdk/memory SOTA (reports in scratchpad, digests survive in kb-worthy detail in session).

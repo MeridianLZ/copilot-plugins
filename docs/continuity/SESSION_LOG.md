@@ -2,6 +2,14 @@
 
 _Newest first._
 
+## 2026-08-15/16 - copilot-fe mermaid design-vault skill (in ~/.agents, not this repo)
+
+- **Request**: full mermaid skill (SKILL.md + references + scripts) in the copilot-fe profile — top-1% UI/color/component/edge-connector knowledge vault; research swarm; 4 themes: light (beige/terracotta), dark (slate/neon), nord (opencode), solarized-dark.
+- **Research**: 6-agent Workflow swarm (official docs via Context7+mermaid.js.org; components/connectors via GitHub search; color craft incl. exact opencode `nord.json` + Solarized hexes + per-diagram themeVariables map; avant-garde styles; methodology; renderer compat). Mermaid 11.16.1 SOTA as of 2026-08-15.
+- **Built**: theme layer on top of a peer session's vault (that session built SKILL.md + 8 refs + lint/validate scripts concurrently) — rewrote `theme-scaffold.sh` to the four `--theme` palettes, color-systems.md §6 with full WCAG-checked hex systems, SKILL.md pointers. All 4 themes render-validated via Mermaid Chart MCP. Commits `bfea7df`, `a3ae84c` in `~/.agents`.
+- **Incident**: `rm -rf $SSOT/mermaid` during SSOT consolidation deleted the live skill — `~/.copilot-fe/skills` had been converted to a symlink by the peer session minutes earlier. Recovered via `git restore` in `~/.agents` (peer had committed); re-applied theme work; memory note saved (`copilot-fe-profile-ssot.md`).
+- **2026-08-16**: "restore lost work" check — skill intact + peer refinements (derived `--from-bg/--from-fg` mode, allowed-tools frontmatter, 11.16.1 baseline); fixed validate-vault hardcoded-version check; committed all (`a3ae84c`). `/Volumes/MACDEV` had detached (whole drive) — remounted, `git fsck` clean, repo untouched at `18d34c1`.
+
 ## 2026-08-07 - copilot-home plugin, persona MCP tools, all merged to main
 
 - **Request**: worktree `fable-medium_copilot_plugin`; Copilot plugin mirroring ~/.copilot user-configurable surfaces + plugin-root .github; inject/project doc; 7 full-frontmatter agents (orchestrator, C#/Azure architect, Foundry/copilot-sdk implementer, AI-research-engineer, peers Chewy/Buzz/Goose) x3 skills + slash evokers + fused asset docs + tool_allowed vs root .mcp.json. Then: expose the three peers as MCP tools, register, restart, deep live probe. Then: name-UX fix, capitalization, merges, continuity, OTel UI replay.
