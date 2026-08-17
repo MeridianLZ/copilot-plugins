@@ -2,6 +2,17 @@
 
 _Append-only reusable patterns and lessons for working in this repo (and similar multi-target plugin/config-fanout repos)._
 
+## 2026-08-16/17 (architecture atlas; branch consolidation)
+
+- **Put the deliverable's invariants in a script, not in prose.** The atlas skill's "every component doc has a dataflow twin, every stage has a payload node" rule is worth more as `checklist.sh` (grep-based, exits nonzero) than as a paragraph an agent may skim. Deterministic phases — scaffolding from templates, structural validation — belong in `scripts/`; only the judgment (what *is* a component, which symbol is load-bearing) should be left to the consuming agent.
+- **Diff the two candidate merge bases before believing a conflict count.** Merging the feature branch into the *stale local* `development` produced 66 conflicts and looked hopeless; against `origin/development` — the branch it was actually 3 commits behind — it was 8. A bad base makes tractable work look impossible.
+- **Read the conflicting commit's message before picking a side.** The submodule-deletion conflicts resolved themselves once `8f0ca1b8 chore(config-ssot): stop tracking Claude plugin cache` was read: the deletion was deliberate, and it was the same root-cause fix the session needed anyway. The config conflict resolved the same way — one side's comment explicitly said "do NOT set this here, or every session becomes a merge conflict", which *is* the resolution.
+- **Prefer an additive union over a merge when branches predate a reorganization.** A probe merge of the old lineages regressed live config and reverted a plugin from v0.2.0 to its first scaffold. Computing "files that exist there and are absent upstream" and checking out only those gave 941 pure additions, zero overwrites, and no possible regression — a merge's value with none of its blast radius.
+- **When a probe touches live config, abort on sight and re-verify.** The merge that wrote conflict markers into the symlinked global `CLAUDE.md` was worth aborting immediately, before reasoning about the merge at all; the follow-up check (markers gone, playwright + caveman blocks present) is what proved the environment was intact.
+- **Push diverged branches under new names instead of forcing.** `local-snapshot/<branch>-<date>` preserves local history off-machine without discarding anything on the remote, and turns "push all" from a destructive operation into a safe one. Force-pushing stays an explicit, separately-authorized decision.
+- **Restore from a copy you moved aside, not from a rebuild.** Recovering the uninstalled plugins was possible only because the untracked runtime dirs had been *moved*, not deleted, before the git operations. `cp -Rn` back (after a `df` check) restored the missing entries without clobbering anything the harness had legitimately regenerated in the meantime.
+- **Fan out per unit of output, and give the fan-out a deadline.** Three writer agents each owning three components produced 9 doc/dataflow pairs in parallel; a `Monitor` armed on "9 dataflow files exist, else 12-minute timeout" meant the wait was bounded rather than open-ended.
+
 ## 2026-08-06 latest (FAQ pass)
 
 - **Answer capability questions from the installed `.d.ts` and a live probe, not docs or memory.** "Can the primary agent set effort?" resolved in one grep of `SessionConfigBase`/`session.setModel` — including the capability gate (`supports.reasoningEffort`) that docs elide.

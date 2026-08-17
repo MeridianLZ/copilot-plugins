@@ -1,28 +1,35 @@
 # CURRENT TASK STATE
 
-_Last updated: 2026-08-16 (scope: copilot-fe mermaid design-vault skill; supersedes 2026-08-07 "copilot-home plugin + persona MCP tools" state — that work merged to main `d94ec4c` and remains stable)_
+_Last updated: 2026-08-17 (scope: codemunch-architecture-atlas skill + docs/architecture, and the ~/.agents branch consolidation; supersedes 2026-08-16 "copilot-fe mermaid design-vault skill" state — that work is committed in `~/.agents` and remains stable)_
 
 ## Where things stand
 
-**Mermaid diagram-mastery skill for the copilot-fe profile is complete, verified, and committed.** The deliverable lives OUTSIDE this repo, in the `~/.agents` git repo (profile SSOT): `~/.agents/settings/global/copilot-profiles/fe/skills/mermaid/` — SKILL.md router + 8 reference files (core-syntax, advanced-techniques, color-systems, design-methodology, component-grammar, connector-grammar, compatibility-validation, pattern-library) + 3 scripts (mermaid-lint.sh, theme-scaffold.sh, validate-vault.sh) + evals/fixtures. Copilot sees it via symlink `~/.copilot-fe/skills → ~/.agents/.../fe/skills`.
+**Both repos are clean, pushed, and green.** Nothing in flight.
 
-Commits in `~/.agents`: `6ed5c69` (skill+wiring), `b138101` (TOCs), `addf0e7` (grammar/pattern refs, validator, evals), `bfea7df` (four vault themes), `a3ae84c` (derived theme mode, allowed-tools, 11.16.1 baseline, validator version-check fix). Working tree clean.
+**This repo (`fintech-marketplace`), `main` = `ff582b9`, in sync with origin:**
 
-**Four canonical themes** (user spec, color-systems.md §6, all WCAG-checked, all render-validated via Mermaid Chart MCP): `light` (beige `#FAF6F0` + terracotta `#C2410C`), `dark` (slate `#0F172A/#1E293B` + neon cyan `#22D3EE`/lime `#A3E635`), `nord` (exact opencode hexes from `sst/opencode` `nord.json`, incl. non-Nord muted `#8B95A7`), `solarized-dark` (canonical ethanschoonover hexes). `theme-scaffold.sh --theme <name>` emits frontmatter; also has derived `--from-bg/--from-fg` two-color mode (linear hex mix, not contrast-guaranteed).
+- `.github/skills/codemunch-architecture-atlas/` — a gold-standard Agent Skill (Copilot-CLI-optimized, works in any Agent Skills host) that maps a repo with jCodemunch and emits a `docs/architecture/` breakdown. Layout: `SKILL.md` (3-pass workflow), `references/` (4 files), `agents/` (3 read-only `.agent.md` profiles), `scripts/` (3 bash, short+long flags, `Usage()`), `assets/templates/` (4 templates). SSOT copy lives at `~/.agents/skills/codemunch-architecture-atlas/` — the two are diff-identical.
+- `docs/architecture/` — the skill's first full run against this repo: `README.md` index, `system-overview.mmd`, and 9 component pairs (`components/<name>.md` + `components/<name>-dataflow.mmd`) for plugin-marketplace, fintech-plugins, guard-enforcement, build-pipeline, target-ports, copilot-plugin, copilot-otel-bridge, copilot-mcp, agent-fannypack. Lynchpins carry exact `file:line` (e.g. `shared/guards/guard-core.sh:52` `emit_deny`, `build/build.sh:15` `strip_fm_keys`, `:72` jq gate, `:74` `bash -n` gate).
+- Commits: `1eb818b` (skill + docs) → merged to main `fe1b038`; `ff582b9` (exec bits on generated target scripts — `build.sh` chmod +x's them, so the committed 100644 modes left the tree dirty after every build). Branch `feat/architecture-atlas` kept and pushed.
+- Gates green: `validate-mermaid.sh` 10/10, `checklist.sh` 9/9, `bash build/build.sh` → `build: OK`, system overview render-validated `valid: true` via Mermaid Chart MCP.
 
-This repo (`fintech-marketplace`) is untouched this session: clean at `18d34c1`. `/Volumes/MACDEV` briefly unmounted 2026-08-16 (drive detached), remounted — `git fsck` clean.
+**`~/.agents`, `development` = `20ea52bd`, in sync with origin:**
 
-## Incident (resolved, lessons in REMEMBER)
+- `d6a3dac6` merged `feat/copilot-profiles-and-plugin` into development (8 conflicts, resolved).
+- `20ea52bd` additively integrated the three divergent local lineages — 941 files present on `main`/`development`/`development-claude-integration` and absent upstream, incl. **133 skills**. Pure additions, zero overwrites.
+- All 15 local branches now exist on origin (21 remote refs). 5 branches whose remotes had diverged were pushed under `local-snapshot/<name>-20260816` rather than force-pushed.
 
-2026-08-15: a peer session built the same skill concurrently and converted `~/.copilot-fe/skills` from real dir to symlink mid-task; my consolidation `rm -rf $SSOT/mermaid` deleted the live skill through it. Recovered 100% via `git restore` in `~/.agents` (the peer session had committed). Theme work re-applied, everything re-verified.
+## Incident (resolved 2026-08-16, lessons in REMEMBER)
+
+Branch switching in `~/.agents` rewrote the live plugin state behind the `~/.claude/plugins` symlink and uninstalled 5 plugins mid-session (claude-mermaid, vercel, all-ios-skills, apple-skills, apple-kit-skills); a later merge probe wrote conflict markers into the live global `CLAUDE.md`. All restored, all 16 plugins resolve, `CLAUDE.md` intact. Root cause fixed: per-machine plugin runtime state is now gitignored in `~/.agents`.
 
 ## Immediate next step
 
-None in flight — skill done. Optional follow-ups: mine the 6-agent research swarm's raw notes (scratchpad `tasks/{official-docs,components-connectors,color-theme,avant-garde,methodology,renderer-compat}.md` — session-scoped, may be gone) for more pattern-library material; repo-side open items from 2026-08-07 still stand (OTel trace of four-way conversation; guard-core duplication cleanup, PLANS phase 3).
+None in flight. Standing options: run the atlas skill against another repo (its real generalization test — it has only been exercised here); the 2026-08-07 repo items still stand (OTel trace of the four-way conversation; guard-core duplication cleanup, PLANS phase 3).
 
-## Key decisions (2026-08-15/16)
+## Key decisions (2026-08-16/17)
 
-- Themes are single-mode by design (no `--dark` flag): pick by page background. Old `--palette` kept as back-compat alias for `--theme`.
-- Neon discipline (dark theme): neon = strokes/edges/one highlighted path only; fills stay slate; dark text on any neon fill.
-- validate-vault checks for any pinned `verified-against: mermaid@X.Y.Z`, not a hardcoded patch version (broke on 11.16.0→11.16.1 bump).
-- Skill SSOT = `~/.agents` (git repo); profile dirs are symlinks. Always commit there after changes — it's the safety net.
+- Payload-node convention is the atlas skill's defining invariant: every stage node in a data-flow diagram is immediately followed by a `<stage>_out` node (`class payload`) naming the concrete output — return type, JSON shape, file written, exit code. `checklist.sh` enforces it structurally; a doc without its dataflow twin fails.
+- `validate-mermaid.sh` never installs tooling: uses `mmdc` only if already on PATH, else a structural lint (disk-constrained machine).
+- `~/.agents` runtime plugin state is gitignored, not tracked — tracking it made every checkout mutate the running agent's own config.
+- Diverged branches get `local-snapshot/*` refs instead of force-pushes; nothing is discarded to make a push succeed.

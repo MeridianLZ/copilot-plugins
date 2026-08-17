@@ -1,5 +1,23 @@
 # TASKS
 
+## Done — 2026-08-16/17 (codemunch-architecture-atlas skill + docs/architecture; commits `1eb818b`, `fe1b038`, `ff582b9`)
+
+- [x] Research SOTA: `skill-creator` structure/progressive disclosure; Copilot CLI Agent Skills frontmatter + discovery dirs + `/skill-name`; mermaid 11.x conventions. 3 parallel agents wrote `references/{copilot-cli-integration,codemunch-recipes,mermaid-conventions}.md`.
+- [x] Author `codemunch-architecture-atlas` in both `~/.agents/skills/` (SSOT) and `.github/skills/` (diff-identical): SKILL.md 3-pass workflow, 4 references, 3 read-only agent profiles, 3 scripts, 4 templates.
+- [x] Scripts verified: `bash -n` clean, `--help` + representative run each; fixed a duplicate-glob bug in `validate-mermaid.sh` found during testing.
+- [x] First full run on this repo: 9 components, 3 parallel writer agents (monitored, 12-min deadline), `docs/architecture/` README + system overview + 9 doc/dataflow pairs with exact `file:line` lynchpins.
+- [x] Gates: `validate-mermaid.sh` 10/10, `checklist.sh` 9/9 (twin + payload-node invariants), `bash build/build.sh` → `build: OK`, overview `valid: true` via Mermaid Chart MCP.
+- [x] `ff582b9`: restore exec bits on the 15 generated target scripts (mode-only; `build.sh` chmod +x's them, so 100644 left the tree dirty after every build).
+- [x] `~/.agents`: merged `feat/copilot-profiles-and-plugin` → development (`d6a3dac6`); additively ported 941 upstream-absent files incl. 133 skills (`20ea52bd`); gitignored per-machine plugin runtime state; all 15 branches pushed (5 diverged ones as `local-snapshot/*-20260816`).
+- [x] Recovered 5 plugins uninstalled mid-session by a branch switch through the `~/.claude/plugins` symlink; verified all 16 resolve and live `CLAUDE.md` is marker-free.
+
+## Open — 2026-08-17 (atlas skill)
+
+- [ ] Run the atlas skill against a repo other than this one — it has only ever been exercised here, so its generalization is unverified.
+- [ ] Only the system overview was render-validated via the Mermaid MCP; the 9 dataflow diagrams passed structural lint only (same idioms, but not proven to render).
+- [ ] jCodemunch has no import-graph extractor for bash/json/powershell/toml/yaml in this repo — component agents confirmed those line numbers by direct reads. Dependency edges for the bash-heavy components are hand-verified, not index-derived.
+- [ ] Consider a `docs/architecture` refresh hook or CI check so the atlas output does not silently drift from the code.
+
 ## Done — 2026-08-15/16 (copilot-fe mermaid skill — lives in ~/.agents repo, commits `bfea7df`/`a3ae84c`)
 
 - [x] 6-agent research swarm (Workflow): mermaid 11.16.1 capabilities, themeVariables per diagram type, opencode Nord + Solarized exact hexes, avant-garde techniques, methodology, renderer compat.

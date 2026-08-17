@@ -2,6 +2,17 @@
 
 _Append-only durable facts, invariants, and pitfalls. Do not delete; correct with a dated follow-up entry instead._
 
+## 2026-08-16/17 (architecture atlas + ~/.agents git hazards)
+
+- **Invariant (payload nodes):** in any `docs/architecture/components/*-dataflow.mmd`, every stage node is immediately followed by its `<stage>_out` payload node (`class ... payload`, `classDef payload` declared) naming the concrete output. `.github/skills/codemunch-architecture-atlas/scripts/checklist.sh` enforces this plus the doc↔dataflow twin rule — run both it and `validate-mermaid.sh` before claiming the atlas output is done.
+- **Invariant (dual-homed skill):** `codemunch-architecture-atlas` exists at `~/.agents/skills/` (SSOT) **and** `.github/skills/` in this repo. They are diff-identical today; edit the SSOT and re-copy, or they will drift silently — nothing enforces the equality.
+- **Pitfall:** `validate-mermaid.sh` green does **not** mean the diagrams render. Without `mmdc` on PATH it only structurally lints (first line is a diagram type; `subgraph`/`end` balanced). Only the system overview has been render-proven, via the Mermaid Chart MCP.
+- **Fact (codemunch coverage here):** the index has no import-graph extractor for bash/json/powershell/toml/yaml (`parse_warnings` says so explicitly), so dependency and dead-code analysis is unreliable for the guard/build/hook components. Their `file:line` references were confirmed by direct reads, not taken from the index.
+- **Pitfall (build cleanliness):** `build/build.sh` chmod +x's the generated target scripts, so any of them committed as 100644 leaves the tree dirty after every build. Fixed for the current set in `ff582b9`; re-check after adding new generated scripts.
+- **⚠ Invariant (`~/.agents` is live config):** `~/.claude/plugins`, `~/.claude/CLAUDE.md` and friends are **symlinks into the `~/.agents` repo**, so every `git checkout`/`merge`/`rebase` there rewrites the running agent's own configuration. On 2026-08-16 a branch switch uninstalled 5 plugins mid-session (claude-mermaid, vercel, all-ios-skills, apple-skills, apple-kit-skills) and a merge probe wrote conflict markers into the live global `CLAUDE.md`, briefly deleting the playwright disk-barrier and caveman blocks. After any branch operation there, verify with `jq -r '.plugins|to_entries[]|.value[].installPath' platform/claude/plugins/installed_plugins.json` (every path must be a real dir) and grep `~/.claude/CLAUDE.md` for conflict markers. Abort immediately if a merge touches `CLAUDE.md`.
+- **Fact (fix applied):** per-machine plugin runtime state in `~/.agents` (`installed_plugins.json`, `known_marketplaces.json` + `.bak`, `plugin-catalog-cache.json`, `.last_inuse_sweep`) is now untracked and gitignored, completing the intent of `8f0ca1b8`. Plugin caches were already ignored via `**/cache/*`.
+- **Fact (branch topology, `~/.agents`):** `origin/development` is the trunk. Local `main` (`dab9fc1c`) is 88 ahead / **253 behind** `origin/main` — it cannot be pushed without a force that would discard 253 remote commits, so it was preserved as `origin/local-snapshot/main-20260816` instead. Its unique content is already integrated into development via `20ea52bd`.
+
 ## 2026-08-06 latest (hook mechanics + SDK control surface)
 
 - **Fact:** Copilot CLI hooks have NO feedback channel to the harness except the exit code; only `preToolUse` reacts (non-zero = deny). No structured decision JSON, no arg rewriting, no context/model mutation from hooks.
